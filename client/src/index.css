@@ -1,0 +1,228 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* CrossCountry Mortgage Brand Palette — Light Mode */
+    /* Primary: CCM Dark Navy/Teal #1a3d5c */
+    /* Accent: CCM Bright Teal #007a8c */
+    /* Green: #2e7d32 (CCM green text on logo) */
+
+    --background: 210 20% 97%;
+    --foreground: 210 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 210 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 47% 11%;
+
+    /* CCM Dark Navy — primary buttons, header */
+    --primary: 207 56% 23%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 200 20% 93%;
+    --secondary-foreground: 207 40% 25%;
+
+    --muted: 210 15% 95%;
+    --muted-foreground: 210 16% 46%;
+
+    /* CCM Bright Teal — accent links, highlights */
+    --accent: 189 100% 27%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 20% 88%;
+    --input: 210 20% 88%;
+    --ring: 207 56% 23%;
+
+    --radius: 0.375rem;
+  }
+
+  .dark {
+    --background: 207 40% 8%;
+    --foreground: 207 20% 92%;
+
+    --card: 207 40% 11%;
+    --card-foreground: 207 20% 92%;
+
+    --popover: 207 40% 11%;
+    --popover-foreground: 207 20% 92%;
+
+    --primary: 189 60% 45%;
+    --primary-foreground: 207 47% 5%;
+
+    --secondary: 207 30% 18%;
+    --secondary-foreground: 207 20% 75%;
+
+    --muted: 207 30% 15%;
+    --muted-foreground: 207 15% 55%;
+
+    --accent: 189 70% 50%;
+    --accent-foreground: 207 47% 5%;
+
+    --destructive: 0 63% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 207 30% 20%;
+    --input: 207 30% 20%;
+    --ring: 189 60% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Source Sans 3', 'Helvetica Neue', system-ui, sans-serif;
+    min-height: 100dvh;
+    line-height: 1.6;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Barlow', 'Arial', sans-serif;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+}
+
+/* Loader animation */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Smooth entry */
+.fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Tabular numbers for financial data */
+.result-number {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* CCM header gradient */
+.ccm-header {
+  background: linear-gradient(135deg, #1a3d5c 0%, #0d2a40 100%);
+}
+
+/* CCM teal accent strip */
+.ccm-accent-bar {
+  background: #007a8c;
+  height: 4px;
+}
+
+/* ── Print / PDF Export styles ── */
+@media print {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+
+  /* Hide everything except the results section */
+  body > #root > div > header,
+  body > #root > div > footer,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Hide the input form and sidebar — only show results */
+  .print-hide {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+    font-size: 10pt;
+    font-family: 'Barlow', Arial, sans-serif;
+    color: #1a1a1a;
+    margin: 0;
+    padding: 0;
+  }
+
+  main {
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Print header — shown only in print */
+  .print-header {
+    display: flex !important;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 20px 12px;
+    background: #1a3d5c !important;
+    color: white;
+    margin-bottom: 16px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .print-header h1 {
+    font-size: 13pt;
+    font-weight: 700;
+    color: white;
+    margin: 0;
+  }
+  .print-header p {
+    font-size: 8pt;
+    color: rgba(255,255,255,0.75);
+    margin: 2px 0 0;
+  }
+
+  /* Cards: flat borders, no shadows */
+  [class*='rounded'] {
+    box-shadow: none !important;
+  }
+
+  /* Grid layouts: stay as-is (browser handles them)
+     But force 2-col results to 1-col on narrow paper */
+  @page {
+    margin: 0.4in 0.5in;
+    size: letter portrait;
+  }
+
+  /* Ensure closing breakdown always expanded in print */
+  .closing-breakdown {
+    display: block !important;
+  }
+
+  /* Hero cards keep their background colors */
+  [style*='gradient'] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Prevent mid-card page breaks */
+  .break-inside-avoid {
+    break-inside: avoid;
+  }
+
+  a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+
+  /* Disclosures smaller */
+  .print-disclosures {
+    font-size: 7pt;
+    color: #666;
+  }
+}
