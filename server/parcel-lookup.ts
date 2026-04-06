@@ -324,9 +324,9 @@ async function lookupPalmBeach(address: string): Promise<ParcelResult> {
     }
 
     const pcnDashed = formatPalmBeachPCN("P:" + pcnDigits);
-    // Use the dashed format for the Summary URL only if it's a full-length PCN
+    // Use Property/Details?parcelId= (digits, no dashes) — the Summary/Details path returns 404
     const parcelUrl = pcnDigits.length >= 14
-      ? `https://pbcpao.gov/Property/Summary/Details/${pcnDashed}`
+      ? `https://pbcpao.gov/Property/Details?parcelId=${pcnDigits}`
       : `https://pbcpao.gov/MasterSearch/SearchResults?propertyType=RE&searchvalue=${encodeURIComponent(streetPart)}`;
 
     // Step 2: GET tax details JSON
@@ -376,7 +376,7 @@ async function lookupPalmBeach(address: string): Promise<ParcelResult> {
     }
 
     return {
-      parcelId: pcnDigits.length >= 14 ? pcnDashed : pcnDigits,
+      parcelId: pcnDigits.length >= 14 ? pcnDashed : pcnDigits, // display dashed format
       parcelUrl,
       assessedValue,
       annualTax,
