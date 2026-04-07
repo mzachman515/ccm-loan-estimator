@@ -768,9 +768,9 @@ export default function HomePage() {
       setPropertyData(data);
       if (data.stateCode) setStateCode(data.stateCode);
 
-      // Populate the tax field with whatever the backend resolved as the higher-of-two
-      // (backend already picks higher of parcel actual vs county avg rate × assessed value)
-      if (data.propertyTax && data.propertyTax > 0) {
+      // Pre-fill with parcel tax if available — the useEffect will update
+      // to higher-of-two vs county-rate × purchase price once user enters a price
+      if (data.taxFromParcel && data.propertyTax && data.propertyTax > 0) {
         form.setValue("propertyTax", Math.round(data.propertyTax));
       }
 
@@ -868,22 +868,28 @@ export default function HomePage() {
   const watchedDownPct = form.watch("downPaymentPercent");
 
   // Auto-calculate property tax whenever home price changes.
-  // Rules:
-  //   • If real parcel tax exists (taxFromParcel), never overwrite — use the parcel value.
-  //   • If only county rate exists, recalculate from price and apply higher-of-two vs parcel estimate.
+  // Always use the HIGHER of:
+  //   (a) actual parcel tax from county appraiser, OR
+  //   (b) county avg rate × PURCHASE PRICE (not assessed value)
+  // This ensures taxes reflect what the buyer will actually pay on the new purchase price.
   useEffect(() => {
     const price = watchedHomePrice;
     if (!propertyData || price <= 0) return;
 
-    if (propertyData.taxFromParcel && propertyData.propertyTax) {
-      // Real parcel data: use it unchanged (backend already chose higher-of-two)
-      form.setValue("propertyTax", Math.round(propertyData.propertyTax));
-    } else if (propertyData.taxRate) {
-      // Rate-based estimate: recalculate as user changes home price
-      const rateMonthly = Math.round((price * (propertyData.taxRate / 100)) / 12);
-      form.setValue("propertyTax", rateMonthly);
-    }
-  }, [watchedHomePrice, propertyData?.taxFromParcel, propertyData?.taxRate]);
+    // County avg based on purchase price
+    const countyRateMonthly = propertyData.taxRate
+      ? Math.round((price * (propertyData.taxRate / 100)) / 12)
+      : 0;
+
+    // Actual parcel tax (raw from county records)
+    const parcelMonthly = propertyData.taxFromParcel && propertyData.propertyTax
+      ? Math.round(propertyData.propertyTax)
+      : 0;
+
+    // Use whichever is higher
+    const higher = Math.max(countyRateMonthly, parcelMonthly);
+    if (higher > 0) form.setValue("propertyTax", higher);
+  }, [watchedHomePrice, propertyData?.taxFromParcel, propertyData?.taxRate, propertyData?.propertyTax]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

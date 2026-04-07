@@ -247,23 +247,11 @@ async function lookupProperty(address: string, magicKey?: string): Promise<Prope
   const appraisalUrl = parcelResult?.parcelUrl
     ?? (county && stateCode ? getAppraisalUrl(county, stateCode, geo?.formattedAddress ?? address) : null);
 
-  // Use the HIGHER of: (a) real parcel tax, or (b) county-avg-rate × assessed value
-  // This ensures we never under-estimate tax — client gets the more conservative number
-  let monthlyTaxToUse: number | null = parcelResult?.monthlyTax ?? null;
-  let taxFromParcel = !!(parcelResult?.monthlyTax);
-
-  if (parcelResult?.assessedValue && taxRate) {
-    const countyAvgMonthly = Math.round((parcelResult.assessedValue * (taxRate / 100)) / 12);
-    if (parcelResult.monthlyTax && countyAvgMonthly > parcelResult.monthlyTax) {
-      // County avg is higher — use it and mark as estimated
-      monthlyTaxToUse = countyAvgMonthly;
-      taxFromParcel = false; // mark as estimate so frontend shows rate label
-    } else if (!parcelResult.monthlyTax && parcelResult.assessedValue && taxRate) {
-      // No direct tax data but we have assessed value + rate — calculate it
-      monthlyTaxToUse = countyAvgMonthly;
-      taxFromParcel = false;
-    }
-  }
+  // Return the raw parcel monthly tax — the frontend will compare it against
+  // county-rate × PURCHASE PRICE (not assessed value) once the user enters a price.
+  // We send both pieces so the frontend can do the higher-of-two dynamically.
+  const monthlyTaxToUse: number | null = parcelResult?.monthlyTax ?? null;
+  const taxFromParcel = !!(parcelResult?.monthlyTax);
 
   // Build Zillow search URL from formatted address
   // Format: https://www.zillow.com/homes/{street-city-state-zip}_rb/
