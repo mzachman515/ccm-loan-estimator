@@ -165,6 +165,8 @@ interface GeocodedAddress {
   county: string;
   city: string;
   zip: string;
+  x: number | null;  // longitude (WGS84)
+  y: number | null;  // latitude (WGS84)
 }
 
 async function geocodeAddress(address: string, magicKey?: string): Promise<GeocodedAddress | null> {
@@ -186,8 +188,60 @@ async function geocodeAddress(address: string, magicKey?: string): Promise<Geoco
       county: a.Subregion ?? "",  // e.g. "Palm Beach County"
       city: a.City ?? "",
       zip: a.Postal ?? "",
+      x: c.location?.x ?? null,   // longitude
+      y: c.location?.y ?? null,   // latitude
     };
   } catch {
+    return null;
+  }
+}
+
+// ─── FEMA NFHL Flood Zone lookup ────────────────────────────────────────────────
+// Uses FEMA’s public ArcGIS NFHL MapServer (Layer 28 = Flood Hazard Zones)
+// Free, no API key needed. Returns FLD_ZONE (e.g. "AE", "X"), ZONE_SUBTY, SFHA_TF
+
+async function fetchFemaFloodZone(lon: number, lat: number): Promise<string | null> {
+  try {
+    const res = await axios.get(
+      "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28/query",
+      {
+        params: {
+          geometry: `${lon},${lat}`,
+          geometryType: "esriGeometryPoint",
+          inSR: "4326",
+          spatialRel: "esriSpatialRelIntersects",
+          outFields: "FLD_ZONE,ZONE_SUBTY,SFHA_TF",
+          returnGeometry: "false",
+          f: "json",
+        },
+        headers: { "User-Agent": "CCM-LoanEstimator/1.0" },
+        timeout: 8000,
+      }
+    );
+
+    const features = res.data?.features;
+    if (!features || !features.length) return null;
+
+    const attrs = features[0].attributes;
+    const zone = (attrs.FLD_ZONE ?? "").trim();
+    const subty = (attrs.ZONE_SUBTY ?? "").trim();
+
+    if (!zone) return null;
+
+    // Build a human-readable label
+    // SFHA_TF: "T" = within Special Flood Hazard Area, "F" = outside
+    if (zone === "X") {
+      if (subty.includes("0.2") || subty.includes("500") || subty.toUpperCase().includes("MODERATE")) {
+        return "X Zone (500-yr / Moderate Risk)";
+      }
+      return "X Zone (Minimal Risk)";
+    }
+    if (subty && subty !== " ") {
+      return `${zone} Zone (${subty.charAt(0).toUpperCase() + subty.slice(1).toLowerCase()})`;
+    }
+    return `${zone} Zone`;
+  } catch (err) {
+    console.error("FEMA flood zone lookup error:", (err as any)?.message);
     return null;
   }
 }
@@ -238,10 +292,16 @@ async function lookupProperty(address: string, magicKey?: string): Promise<Prope
     }
   }
 
-  // Try county-specific parcel lookup for direct deep-link + real tax data
-  const parcelResult = (county && stateCode)
-    ? await lookupParcel(geo?.formattedAddress ?? address, county, stateCode)
-    : null;
+  // Run parcel lookup + FEMA flood zone in parallel for speed
+  const [parcelResult, femaFloodZone] = await Promise.all([
+    (county && stateCode)
+      ? lookupParcel(geo?.formattedAddress ?? address, county, stateCode)
+      : Promise.resolve(null),
+    // Fetch FEMA flood zone for all addresses using geocoded coordinates
+    (geo?.x && geo?.y)
+      ? fetchFemaFloodZone(geo.x, geo.y)
+      : Promise.resolve(null),
+  ]);
 
   // Build appraiser URL: prefer direct parcel URL from lookup, fall back to search URL
   const appraisalUrl = parcelResult?.parcelUrl
@@ -282,7 +342,8 @@ async function lookupProperty(address: string, magicKey?: string): Promise<Prope
     assessedValue: parcelResult?.assessedValue ?? null,
     annualTax: parcelResult?.annualTax ?? null,
     taxFromParcel,
-    floodZone: parcelResult?.floodZone ?? null,
+    // Use county appraiser flood zone if available, otherwise fall back to FEMA NFHL
+    floodZone: parcelResult?.floodZone ?? femaFloodZone ?? null,
     zillowUrl,
     source: geo ? (parcelResult?.parcelId ? "county appraiser" : "address validated") : "manual",
   };

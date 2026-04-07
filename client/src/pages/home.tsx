@@ -777,8 +777,8 @@ export default function HomePage() {
       if (data.taxFromParcel && data.propertyTax && data.propertyTax > 0) {
         form.setValue("propertyTax", Math.round(data.propertyTax));
       }
-      // Auto-enable flood insurance if property is in a high-risk FEMA zone
-      if (data.floodZone && /^(AE|VE|AH|AO|AR|A[0-9]|A$|V$)/i.test(data.floodZone)) {
+      // Auto-enable flood insurance if property is in a high-risk FEMA zone (SFHA)
+      if (data.floodZone && /^(AE?|VE?|AH|AO|AR|A[0-9])/i.test(data.floodZone)) {
         setFloodInsuranceRequired(true);
       }
 
@@ -1023,16 +1023,19 @@ export default function HomePage() {
                     </div>
                     {/* Flood Zone banner — shown prominently when available */}
                     {propertyData.floodZone && (() => {
-                      const isHighRisk = /^(AE|VE|AH|AO|AR|A[0-9]|A$|V$)/i.test(propertyData.floodZone);
-                      const isModerate = /^(X500|B$|Shaded X)/i.test(propertyData.floodZone);
+                      const fz = propertyData.floodZone!;
+                      // High-risk: any A or V zone (Special Flood Hazard Area)
+                      const isHighRisk = /^(AE?|VE?|AH|AO|AR|A[0-9])/i.test(fz);
+                      // Moderate: 500-yr (X500, shaded X, B)
+                      const isModerate = /500-yr|Moderate|X500|Shaded X|\bB\b/i.test(fz);
                       const bgColor = isHighRisk ? "#fff0ee" : isModerate ? "#fffbea" : "#f0faf4";
                       const borderColor = isHighRisk ? "#e74c3c" : isModerate ? "#f39c12" : "#27ae60";
                       const textColor = isHighRisk ? "#c0392b" : isModerate ? "#d68910" : "#1e8449";
                       const icon = isHighRisk ? "⚠" : isModerate ? "◈" : "✓";
                       const label = isHighRisk
-                        ? "High-risk flood zone — flood insurance typically required by lender"
+                        ? "High-risk SFHA — flood insurance required by lender"
                         : isModerate
-                        ? "Moderate flood risk — flood insurance may be recommended"
+                        ? "Moderate flood risk (500-yr) — flood insurance recommended"
                         : "Minimal flood risk — outside FEMA special flood hazard area";
                       return (
                         <div
