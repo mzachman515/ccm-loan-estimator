@@ -1093,17 +1093,22 @@ export default function HomePage() {
                         : isModerate
                         ? "Moderate flood risk (500-yr) — flood insurance recommended"
                         : "Minimal flood risk — outside FEMA special flood hazard area";
+                      const femaUrl = `https://msc.fema.gov/portal/search?AddressQuery=${encodeURIComponent(propertyData.cityStateZip ?? "")}`;
                       return (
-                        <div
-                          className="flex items-start gap-2 mt-2 px-3 py-2 rounded-md text-xs"
-                          style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}` }}
+                        <a
+                          href={femaUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-start gap-2 mt-2 px-3 py-2 rounded-md text-xs transition-opacity hover:opacity-80 no-underline"
+                          style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}`, textDecoration: "none" }}
                         >
                           <span className="font-bold text-sm shrink-0" style={{ color: textColor }}>{icon}</span>
-                          <div>
+                          <div className="flex-1">
                             <span className="font-bold" style={{ color: textColor }}>FEMA Flood Zone: {propertyData.floodZone}</span>
                             <span className="ml-1.5" style={{ color: textColor, opacity: 0.85 }}>— {label}</span>
                           </div>
-                        </div>
+                          <ExternalLink className="w-3 h-3 shrink-0 mt-0.5" style={{ color: textColor, opacity: 0.6 }} />
+                        </a>
                       );
                     })()}
                     {/* County Property Appraiser deep link + Zillow link */}
