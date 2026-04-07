@@ -339,43 +339,43 @@ function generatePDF(estimate: EstimateResult) {
 
   // ── Title ───────────────────────────────────────────────────────────────────
   doc.setTextColor(26, 61, 92);
-  doc.setFontSize(16);
+  doc.setFontSize(13);
   doc.setFont("helvetica", "bold");
   doc.text("Home Purchase Loan Estimate", margin, y);
-  y += 5;
-  doc.setFontSize(8);
+  y += 4;
+  doc.setFontSize(7.5);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(100, 100, 100);
   doc.text(estimate.address, margin, y);
   doc.text("Generated: " + new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }), W - margin, y, { align: "right" });
-  y += 8;
+  y += 6;
 
   // ── Two hero boxes side by side ──────────────────────────────────────────────
   const boxW = (W - margin * 2 - 4) / 2;
-  const boxH = 40; // tall enough for label / big number / subtitle with clear spacing
+  const boxH = 34; // compact hero boxes
   const cx1 = margin + boxW / 2;
   const cx2 = margin + boxW + 4 + boxW / 2;
 
   // Monthly Payment box (navy)
   doc.setFillColor(26, 61, 92);
   doc.roundedRect(margin, y, boxW, boxH, 2, 2, "F");
-  doc.setFontSize(7); doc.setFont("helvetica", "bold"); doc.setTextColor(126, 203, 214);
-  doc.text("EST. MONTHLY PAYMENT", cx1, y + 7, { align: "center" });
-  doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.setTextColor(255, 255, 255);
-  doc.text(fmtCurrency(estimate.totalMonthlyPayment), cx1, y + 22, { align: "center" });
-  doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(200, 230, 235);
-  doc.text("/ month · all-in", cx1, y + 33, { align: "center" });
+  doc.setFontSize(6.5); doc.setFont("helvetica", "bold"); doc.setTextColor(126, 203, 214);
+  doc.text("EST. MONTHLY PAYMENT", cx1, y + 6, { align: "center" });
+  doc.setFontSize(20); doc.setFont("helvetica", "bold"); doc.setTextColor(255, 255, 255);
+  doc.text(fmtCurrency(estimate.totalMonthlyPayment), cx1, y + 19, { align: "center" });
+  doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(200, 230, 235);
+  doc.text("/ month · all-in", cx1, y + 28, { align: "center" });
 
   // Cash to Close box (teal)
   doc.setFillColor(0, 122, 140);
   doc.roundedRect(margin + boxW + 4, y, boxW, boxH, 2, 2, "F");
-  doc.setFontSize(7); doc.setFont("helvetica", "bold"); doc.setTextColor(255, 255, 255);
-  doc.text("TOTAL CASH TO CLOSE", cx2, y + 7, { align: "center" });
-  doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.setTextColor(255, 255, 255);
-  doc.text(fmtCurrency(estimate.totalCashNeeded), cx2, y + 22, { align: "center" });
-  doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(220, 240, 243);
-  doc.text("needed at closing", cx2, y + 33, { align: "center" });
-  y += boxH + 6;
+  doc.setFontSize(6.5); doc.setFont("helvetica", "bold"); doc.setTextColor(255, 255, 255);
+  doc.text("TOTAL CASH TO CLOSE", cx2, y + 6, { align: "center" });
+  doc.setFontSize(20); doc.setFont("helvetica", "bold"); doc.setTextColor(255, 255, 255);
+  doc.text(fmtCurrency(estimate.totalCashNeeded), cx2, y + 19, { align: "center" });
+  doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(220, 240, 243);
+  doc.text("needed at closing", cx2, y + 28, { align: "center" });
+  y += boxH + 4;
 
   // ── Loan Summary + Monthly Breakdown side by side ────────────────────────────
   const col1 = margin;
@@ -424,7 +424,7 @@ function generatePDF(estimate: EstimateResult) {
   // Draw both tables
   const tableStyle = {
     theme: "plain" as const,
-    styles: { fontSize: 8, cellPadding: 1.5, textColor: [50, 50, 50] as [number,number,number] },
+    styles: { fontSize: 7.5, cellPadding: 1.2, textColor: [50, 50, 50] as [number,number,number] },
     columnStyles: { 0: { cellWidth: boxW * 0.6 }, 1: { cellWidth: boxW * 0.4, halign: "right" as const, fontStyle: "bold" as const } },
     margin: { left: col1, right: W - col1 - boxW },
   };
@@ -463,81 +463,118 @@ function generatePDF(estimate: EstimateResult) {
   });
   const mbEndY = (doc as any).lastAutoTable.finalY;
 
-  y = Math.max(loanEndY, mbEndY) + 6;
+  y = Math.max(loanEndY, mbEndY) + 4;
 
-  // ── Cash to Close detail ─────────────────────────────────────────────────────
-  doc.setFillColor(240, 248, 250);
-  doc.roundedRect(col1, y, boxW, 6, 1, 1, "F");
-  doc.setTextColor(0, 122, 140);
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "bold");
-  doc.text("CASH NEEDED TO CLOSE", col1 + 3, y + 4.2);
-  y += 7;
+  // ── Cash to Close detail + Closing Costs Breakdown side by side ─────────────
+  // Left col: Cash to close summary | Right col: closing costs breakdown
+  // This 2-column layout is key to fitting everything on one page.
 
-  autoTable(doc, {
-    body: [
-      ["Down Payment", fmtCurrency(estimate.downPaymentAmount)],
-      ["Closing Costs (" + ((estimate.closingCosts / estimate.homePrice) * 100).toFixed(1) + "%)", fmtCurrency(estimate.closingCosts)],
-      ["TOTAL CASH TO CLOSE", fmtCurrency(estimate.totalCashNeeded)],
-    ],
-    startY: y,
-    ...tableStyle,
-    margin: { left: col1, right: W - col1 - boxW },
-  });
-  y = (doc as any).lastAutoTable.finalY + 6;
-
-  // ── Closing Costs Breakdown ───────────────────────────────────────────────────
-  doc.setFillColor(26, 61, 92);
-  doc.roundedRect(margin, y, W - margin * 2, 6, 1, 1, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "bold");
-  doc.text("ESTIMATED CLOSING COSTS BREAKDOWN", margin + 3, y + 4.2);
-  y += 7;
-
+  // Build closing cost rows (without additional seller credit — show separately)
   const SECTION_PREFIX = ">> ";
   const ccRows: [string, string][] = [];
+  let grossClosingTotal = 0; // total before additional seller credit
+  const additionalCredit = estimate.additionalSellerCredit ?? 0;
+
   for (const [label, amount] of Object.entries(estimate.closingCostBreakdown)) {
+    // Skip the "Additional Seller Credit" line — we'll add it below as a separate summary row
+    if (label === "Additional Seller Credit") continue;
     if (amount === "header") {
-      // Use plain ASCII section header (Helvetica cannot render box-drawing chars)
       const cleanLabel = label.replace(/[-─\s]+/g, " ").trim();
       ccRows.push([SECTION_PREFIX + cleanLabel, ""]);
     } else {
       const amt = amount as number;
-      // Use plain ASCII minus for credits
+      if (amt !== 0) grossClosingTotal += amt; // tally gross (includes title credits)
       ccRows.push([label, amt < 0 ? "-" + fmtCurrency(Math.abs(amt)) : fmtCurrency(amt)]);
     }
   }
 
+  // Subtotal + additional credit + net rows
+  ccRows.push([SECTION_PREFIX + "TOTALS", ""]);
+  ccRows.push(["Total Closing Costs", fmtCurrency(Math.round(grossClosingTotal))]);
+  if (additionalCredit > 0) {
+    ccRows.push(["Additional Seller Credit", "-" + fmtCurrency(additionalCredit)]);
+    ccRows.push(["NET CASH TO CLOSE", fmtCurrency(estimate.totalCashNeeded)]);
+  }
+
+  // Left col: cash-to-close summary
+  doc.setFillColor(240, 248, 250);
+  doc.roundedRect(col1, y, boxW, 6, 1, 1, "F");
+  doc.setTextColor(0, 122, 140);
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  doc.text("CASH NEEDED TO CLOSE", col1 + 3, y + 4.2);
+
+  const cashRows: [string, string][] = [
+    ["Down Payment (" + estimate.downPaymentPercent + "%)", fmtCurrency(estimate.downPaymentAmount)],
+    ["Gross Closing Costs", fmtCurrency(Math.round(grossClosingTotal))],
+  ];
+  if (additionalCredit > 0) {
+    cashRows.push(["Additional Seller Credit", "-" + fmtCurrency(additionalCredit)]);
+  }
+  cashRows.push(["TOTAL CASH TO CLOSE", fmtCurrency(estimate.totalCashNeeded)]);
+
   autoTable(doc, {
-    body: ccRows,
-    startY: y,
-    theme: "plain",
-    styles: { fontSize: 7.5, cellPadding: 1.2, textColor: [50, 50, 50] as [number,number,number] },
-    columnStyles: {
-      0: { cellWidth: (W - margin * 2) * 0.72 },
-      1: { cellWidth: (W - margin * 2) * 0.28, halign: "right" as const },
-    },
-    margin: { left: margin, right: margin },
+    body: cashRows,
+    startY: y + 7,
+    ...tableStyle,
+    styles: { ...tableStyle.styles, fontSize: 7.5, cellPadding: 1.3 },
+    margin: { left: col1, right: W - col1 - boxW },
     didParseCell: (data: any) => {
-      if (data.cell.raw === "") return;  // empty header value
-      const raw = data.row.raw[0] as string;
-      if (raw.startsWith(SECTION_PREFIX)) {
-        data.cell.styles.fillColor = [240, 248, 250];
-        data.cell.styles.textColor = [0, 122, 140];
+      if (data.row.index === cashRows.length - 1) {
         data.cell.styles.fontStyle = "bold";
-        data.cell.styles.fontSize = 7;
-        // Strip the ">>" prefix from displayed text
-        if (Array.isArray(data.cell.text)) data.cell.text = [raw.slice(SECTION_PREFIX.length)];
+        data.cell.styles.textColor = [26, 61, 92];
+        data.cell.styles.fillColor = [226, 240, 249];
       }
-      // Credit line (negative value)
       if (typeof data.row.raw[1] === "string" && data.row.raw[1].startsWith("-")) {
         data.cell.styles.textColor = [0, 122, 140];
         data.cell.styles.fontStyle = "bold";
       }
     },
   });
-  y = (doc as any).lastAutoTable.finalY + 6;
+  const cashEndY = (doc as any).lastAutoTable.finalY;
+
+  // Right col: closing costs breakdown
+  doc.setFillColor(26, 61, 92);
+  doc.roundedRect(col2, y, boxW, 6, 1, 1, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  doc.text("CLOSING COSTS BREAKDOWN", col2 + 3, y + 4.2);
+
+  autoTable(doc, {
+    body: ccRows,
+    startY: y + 7,
+    theme: "plain",
+    styles: { fontSize: 6.8, cellPadding: 0.9, textColor: [50, 50, 50] as [number,number,number] },
+    columnStyles: {
+      0: { cellWidth: boxW * 0.70 },
+      1: { cellWidth: boxW * 0.30, halign: "right" as const },
+    },
+    margin: { left: col2, right: margin },
+    didParseCell: (data: any) => {
+      if (data.cell.raw === "") return;
+      const raw = data.row.raw[0] as string;
+      if (raw.startsWith(SECTION_PREFIX)) {
+        data.cell.styles.fillColor = [240, 248, 250];
+        data.cell.styles.textColor = [0, 122, 140];
+        data.cell.styles.fontStyle = "bold";
+        data.cell.styles.fontSize = 6.5;
+        if (Array.isArray(data.cell.text)) data.cell.text = [raw.slice(SECTION_PREFIX.length)];
+      }
+      if (typeof data.row.raw[1] === "string" && data.row.raw[1].startsWith("-")) {
+        data.cell.styles.textColor = [0, 122, 140];
+        data.cell.styles.fontStyle = "bold";
+      }
+      // Totals rows bold
+      if (raw === "Total Closing Costs" || raw === "NET CASH TO CLOSE") {
+        data.cell.styles.fontStyle = "bold";
+        data.cell.styles.textColor = [26, 61, 92];
+      }
+    },
+  });
+  const ccEndY = (doc as any).lastAutoTable.finalY;
+
+  y = Math.max(cashEndY, ccEndY) + 5;
 
   // ── Footer / Disclosures ─────────────────────────────────────────────────────
   const pageH = doc.internal.pageSize.getHeight();
@@ -561,7 +598,20 @@ function generatePDF(estimate: EstimateResult) {
     y += 3.5;
   }
 
-  doc.save("CrossCountry-LoanEstimate.pdf");
+  // ── Filename: "123 Main St - $500,000 - 20% Down - Conventional 30yr.pdf" ──
+  const streetPart = estimate.address.split(",")[0].trim();
+  const loanShort = estimate.loanType
+    .replace("30-Year Fixed", "30yr")
+    .replace("15-Year Fixed", "15yr")
+    .replace("(Conventional)", "Conv")
+    .replace("(FHA)", "FHA")
+    .replace("(VA)", "VA")
+    .replace("(Jumbo)", "Jumbo")
+    .replace("7/1 Adjustable Rate (ARM)", "ARM")
+    .replace(/[()]/g, "").trim();
+  const filename = `${streetPart} - ${fmtCurrency(estimate.homePrice)} - ${estimate.downPaymentPercent}pct Down - ${loanShort}.pdf`
+    .replace(/[/\\:*?"<>|]/g, "-"); // sanitize for file system
+  doc.save(filename);
 }
 
 // ─── Market Data Panel ───────────────────────────────────────────────────────
@@ -683,6 +733,10 @@ export default function HomePage() {
   const [includeEscrow, setIncludeEscrow] = useState<boolean>(true);
   const [sellerPaysTitle, setSellerPaysTitle] = useState<boolean>(true);
   const [floodInsuranceRequired, setFloodInsuranceRequired] = useState<boolean>(false);
+  const [homeInsuranceOverride, setHomeInsuranceOverride] = useState<string>("");
+  const [floodInsuranceOverride, setFloodInsuranceOverride] = useState<string>("");
+  const [showHomeInsOverride, setShowHomeInsOverride] = useState<boolean>(false);
+  const [showFloodInsOverride, setShowFloodInsOverride] = useState<boolean>(false);
 
   const { data: ratesData, isLoading: ratesLoading } = useQuery<{ rates: MortgageRate[] }>({
     queryKey: ["/api/rates"],
@@ -759,6 +813,13 @@ export default function HomePage() {
         // Additional seller credit in dollars
         additionalSellerCredit: values.additionalSellerCredit && parseFloat(values.additionalSellerCredit) > 0
           ? parseFloat(values.additionalSellerCredit)
+          : undefined,
+        // Insurance overrides (monthly $)
+        homeInsuranceOverride: homeInsuranceOverride && parseFloat(homeInsuranceOverride) > 0
+          ? parseFloat(homeInsuranceOverride)
+          : undefined,
+        floodInsuranceOverride: floodInsuranceOverride && parseFloat(floodInsuranceOverride) > 0
+          ? parseFloat(floodInsuranceOverride)
           : undefined,
       });
       return res.json() as Promise<EstimateResult>;
@@ -1319,44 +1380,115 @@ export default function HomePage() {
                       </FormItem>
                     )} />
 
-                    <div className="flex items-start gap-2.5 p-3 rounded-lg border text-sm" style={{ backgroundColor: "#f0f8fa", borderColor: "#b3dde3" }}>
-                      <Shield className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "#007a8c" }} />
-                      <div>
-                        <span className="font-semibold">Home Insurance</span>
-                        <span className="text-muted-foreground ml-1">
-                          — Estimated at 0.8% of purchase price annually, included automatically in your monthly total.
-                        </span>
+                    {/* Home Insurance — with optional monthly override */}
+                    <div className="rounded-lg border text-sm" style={{ backgroundColor: "#f0f8fa", borderColor: "#b3dde3" }}>
+                      <div className="flex items-start justify-between gap-2.5 p-3">
+                        <div className="flex items-start gap-2.5">
+                          <Shield className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "#007a8c" }} />
+                          <div>
+                            <span className="font-semibold">Home Insurance</span>
+                            <span className="text-muted-foreground ml-1">
+                              {homeInsuranceOverride && parseFloat(homeInsuranceOverride) > 0
+                                ? <span style={{ color: "#1a3d5c" }} className="font-medium">
+                                    Using {fmtCurrency(parseFloat(homeInsuranceOverride))}/mo (custom)
+                                  </span>
+                                : `Est. at 0.8% of price annually${watchedHomePrice > 0 ? ` · ~${fmtCurrency(Math.round(watchedHomePrice * 0.008 / 12))}/mo` : ""}`
+                              }
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowHomeInsOverride(v => !v)}
+                          className="text-xs font-medium shrink-0 transition-colors hover:opacity-70"
+                          style={{ color: "#007a8c" }}
+                        >
+                          {showHomeInsOverride ? "Cancel" : "Override"}
+                        </button>
                       </div>
+                      {showHomeInsOverride && (
+                        <div className="px-3 pb-3">
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="Monthly amount (e.g. 250)"
+                              value={homeInsuranceOverride}
+                              onChange={e => setHomeInsuranceOverride(e.target.value.replace(/[^0-9]/g, ""))}
+                              className="w-full pl-7 pr-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-1"
+                              style={{ borderColor: "#b3dde3" }}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Flood Insurance toggle */}
+                    {/* Flood Insurance toggle + optional override */}
                     <div
-                      className="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors"
+                      className="rounded-lg border transition-colors"
                       style={{
                         backgroundColor: floodInsuranceRequired ? "#fff5f0" : "#f5f5f5",
                         borderColor: floodInsuranceRequired ? "#f0a080" : "#e5e7eb",
                       }}
-                      onClick={() => setFloodInsuranceRequired(!floodInsuranceRequired)}
                     >
                       <div
-                        className="w-10 h-5 rounded-full relative shrink-0 mt-0.5 transition-colors"
-                        style={{ backgroundColor: floodInsuranceRequired ? "#c0533a" : "#d1d5db" }}
+                        className="flex items-start gap-3 p-3 cursor-pointer"
+                        onClick={() => setFloodInsuranceRequired(!floodInsuranceRequired)}
                       >
                         <div
-                          className="w-4 h-4 bg-white rounded-full absolute top-0.5 transition-all shadow-sm"
-                          style={{ left: floodInsuranceRequired ? "calc(100% - 18px)" : "2px" }}
-                        />
+                          className="w-10 h-5 rounded-full relative shrink-0 mt-0.5 transition-colors"
+                          style={{ backgroundColor: floodInsuranceRequired ? "#c0533a" : "#d1d5db" }}
+                        >
+                          <div
+                            className="w-4 h-4 bg-white rounded-full absolute top-0.5 transition-all shadow-sm"
+                            style={{ left: floodInsuranceRequired ? "calc(100% - 18px)" : "2px" }}
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-foreground">
+                            {floodInsuranceRequired ? "Flood Insurance Required" : "No Flood Insurance"}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {floodInsuranceRequired
+                              ? (() => {
+                                  const monthly = floodInsuranceOverride && parseFloat(floodInsuranceOverride) > 0
+                                    ? parseFloat(floodInsuranceOverride)
+                                    : watchedHomePrice > 0 ? Math.round(watchedHomePrice * 0.005 / 12) : null;
+                                  const label = floodInsuranceOverride && parseFloat(floodInsuranceOverride) > 0
+                                    ? `${fmtCurrency(monthly!)}/mo (custom)` : `Est. at 0.5% annually${monthly ? ` · ~${fmtCurrency(monthly)}/mo` : ""}`;
+                                  return `${label} · Escrow always required.`;
+                                })()
+                              : "Toggle on if property is in a FEMA flood zone (SFHA)."}
+                          </p>
+                        </div>
+                        {floodInsuranceRequired && (
+                          <button
+                            type="button"
+                            onClick={e => { e.stopPropagation(); setShowFloodInsOverride(v => !v); }}
+                            className="text-xs font-medium shrink-0 transition-colors hover:opacity-70"
+                            style={{ color: "#c0533a" }}
+                          >
+                            {showFloodInsOverride ? "Cancel" : "Override"}
+                          </button>
+                        )}
                       </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-foreground">
-                          {floodInsuranceRequired ? "Flood Insurance Required" : "No Flood Insurance"}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {floodInsuranceRequired
-                            ? `Estimated at 0.5% of purchase price annually. Flood escrow is always required by lender.${watchedHomePrice > 0 ? ` (~${"$"}${Math.round(watchedHomePrice * 0.005 / 12).toLocaleString()}/mo)` : ""}`
-                            : "Toggle on if property is in a FEMA flood zone (SFHA)."}
-                        </p>
-                      </div>
+                      {floodInsuranceRequired && showFloodInsOverride && (
+                        <div className="px-3 pb-3">
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="Monthly amount (e.g. 150)"
+                              value={floodInsuranceOverride}
+                              onChange={e => setFloodInsuranceOverride(e.target.value.replace(/[^0-9]/g, ""))}
+                              className="w-full pl-7 pr-3 py-2 rounded-md border bg-background text-sm focus:outline-none focus:ring-1"
+                              style={{ borderColor: "#f0a080" }}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Seller pays title toggle — always visible */}
@@ -1745,32 +1877,61 @@ export default function HomePage() {
               </CardHeader>
               <CardContent className={`pt-4 closing-breakdown${showClosingBreakdown ? " fade-in" : " hidden"}`}>
                   <div>
-                    {Object.entries(estimate.closingCostBreakdown).map(([label, amount]) =>
-                      amount === "header" ? (
-                        <ClosingCostSection key={label} label={label} />
-                      ) : (
-                        <div
-                          key={label}
-                          className="flex justify-between items-center py-2 pl-3 border-b border-border last:border-0"
-                          style={(amount as number) < 0 ? { backgroundColor: "#f0faf7" } : undefined}
-                        >
-                          <span
-                            className="text-sm pr-4"
-                            style={{ color: (amount as number) < 0 ? "#007a8c" : undefined }}
-                          >
-                            {label}
-                          </span>
-                          <span
-                            className="result-number text-sm font-semibold shrink-0"
-                            style={{ color: (amount as number) < 0 ? "#007a8c" : undefined }}
-                          >
-                            {(amount as number) < 0
-                              ? `−${fmtCurrency(Math.abs(amount as number))}`
-                              : fmtCurrency(amount as number)}
-                          </span>
-                        </div>
-                      )
-                    )}
+                    {(() => {
+                      // Separate the additional seller credit from the rest so we can
+                      // show a gross subtotal first, then the credit, then net.
+                      const entries = Object.entries(estimate.closingCostBreakdown);
+                      const regularEntries = entries.filter(([l]) => l !== "Additional Seller Credit");
+                      const addlCredit = estimate.additionalSellerCredit ?? 0;
+                      const grossTotal = regularEntries
+                        .filter(([, v]) => v !== "header" && typeof v === "number")
+                        .reduce((s, [, v]) => s + (v as number), 0);
+
+                      return (
+                        <>
+                          {regularEntries.map(([label, amount]) =>
+                            amount === "header" ? (
+                              <ClosingCostSection key={label} label={label} />
+                            ) : (
+                              <div
+                                key={label}
+                                className="flex justify-between items-center py-2 pl-3 border-b border-border last:border-0"
+                                style={(amount as number) < 0 ? { backgroundColor: "#f0faf7" } : undefined}
+                              >
+                                <span className="text-sm pr-4" style={{ color: (amount as number) < 0 ? "#007a8c" : undefined }}>
+                                  {label}
+                                </span>
+                                <span className="result-number text-sm font-semibold shrink-0" style={{ color: (amount as number) < 0 ? "#007a8c" : undefined }}>
+                                  {(amount as number) < 0
+                                    ? `−${fmtCurrency(Math.abs(amount as number))}`
+                                    : fmtCurrency(amount as number)}
+                                </span>
+                              </div>
+                            )
+                          )}
+                          {/* Gross subtotal */}
+                          <div className="flex justify-between items-center py-2 pl-3 border-t-2 mt-1" style={{ borderColor: "#1a3d5c" }}>
+                            <span className="text-sm font-semibold" style={{ color: "#1a3d5c" }}>Total Closing Costs</span>
+                            <span className="result-number text-sm font-bold" style={{ color: "#1a3d5c" }}>{fmtCurrency(Math.round(grossTotal))}</span>
+                          </div>
+                          {/* Additional seller credit */}
+                          {addlCredit > 0 && (
+                            <>
+                              <div className="flex justify-between items-center py-2 pl-3 border-b border-border" style={{ backgroundColor: "#f0faf7" }}>
+                                <span className="text-sm" style={{ color: "#007a8c" }}>Additional Seller Credit</span>
+                                <span className="result-number text-sm font-semibold" style={{ color: "#007a8c" }}>
+                                  −{fmtCurrency(addlCredit)}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center py-2.5 pl-3 rounded-md mt-1" style={{ backgroundColor: "#e6f7f5" }}>
+                                <span className="text-sm font-bold" style={{ color: "#007a8c" }}>Net Closing Costs</span>
+                                <span className="result-number text-sm font-bold" style={{ color: "#007a8c" }}>{fmtCurrency(estimate.closingCosts)}</span>
+                              </div>
+                            </>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                   {estimate.sellerPaysTitle && estimate.sellerTitleCredit > 0 && (
                     <div className="mt-3 px-3 py-2 rounded-md text-xs" style={{ backgroundColor: "#e6f7f5", color: "#007a8c" }}>

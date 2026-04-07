@@ -1122,9 +1122,19 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     const rateIsCustom = interestRate !== rateInfo.rate;
 
     const monthlyPI = calcMonthlyPayment(loanAmount, interestRate, termYears);
-    const homeInsurance = (homePrice * 0.008) / 12;
+    // Insurance: use override if provided, otherwise estimate from price
+    const homeInsuranceOverride = req.body.homeInsuranceOverride ? parseFloat(String(req.body.homeInsuranceOverride)) : null;
+    const homeInsurance = (homeInsuranceOverride && homeInsuranceOverride > 0)
+      ? homeInsuranceOverride
+      : (homePrice * 0.008) / 12;
+
     const floodInsuranceRequired = req.body.floodInsuranceRequired === true;
-    const monthlyFlood = floodInsuranceRequired ? Math.round((homePrice * 0.005) / 12 * 100) / 100 : 0;
+    const floodInsuranceOverride = req.body.floodInsuranceOverride ? parseFloat(String(req.body.floodInsuranceOverride)) : null;
+    const monthlyFlood = floodInsuranceRequired
+      ? ((floodInsuranceOverride && floodInsuranceOverride > 0)
+          ? floodInsuranceOverride
+          : Math.round((homePrice * 0.005) / 12 * 100) / 100)
+      : 0;
     const monthlyMIP = loanType === "fha_30" ? (loanAmount * 0.0055) / 12 : 0;
 
     // PMI: use override rate if provided, otherwise use MGIC tiered table
