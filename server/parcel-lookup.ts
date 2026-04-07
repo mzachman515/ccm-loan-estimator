@@ -141,7 +141,8 @@ async function lookupSarasota(address: string): Promise<ParcelResult> {
 // Returns: [{pid: "402207429001", pad: "ADDRESS FL ZIP"}]
 // Parcel page: /Show_Parcel.asp?acct={pid}&gen=T&tax=T&bld=T&oth=T&sal=T&lnd=T&leg=T
 // Flood zone: YES — HTML table with caption "FEMA Flood Zone"
-// Effective millage rate: ~0.87% (Charlotte County 2025)
+// Effective millage rate: ~1.005% for non-homestead (Charlotte County 2025 published millage: ~10.05 mills)
+// Note: 0.87% is the county-wide average including homestead exemptions; new buyers pay ~1.005%
 
 async function lookupCharlotte(address: string): Promise<ParcelResult> {
   try {
@@ -213,7 +214,9 @@ async function lookupCharlotte(address: string): Promise<ParcelResult> {
       }
     }
 
-    const CHARLOTTE_EFFECTIVE_RATE = 0.0087;
+    // Use non-homestead millage rate — new buyers have no homestead exemption in year of purchase
+    // Charlotte County 2025 published total millage ~10.05 mills = 1.005%
+    const CHARLOTTE_EFFECTIVE_RATE = 0.01005;
     const annualTax = assessedValue ? Math.round(assessedValue * CHARLOTTE_EFFECTIVE_RATE) : null;
 
     return {
