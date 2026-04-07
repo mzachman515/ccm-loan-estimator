@@ -91,6 +91,7 @@ interface EstimateResult {
   escrowWaived: boolean;
   sellerPaysTitle: boolean;
   sellerTitleCredit: number;
+  grossClosingCosts: number;      // total before any seller credit
   additionalSellerCredit?: number;
   vaFundingFee?: number;
   vaFundingFeeOption?: string;
@@ -504,12 +505,15 @@ function generatePDF(estimate: EstimateResult) {
   doc.setFont("helvetica", "bold");
   doc.text("CASH NEEDED TO CLOSE", col1 + 3, y + 4.2);
 
+  const grossPct = ((estimate.grossClosingCosts / estimate.homePrice) * 100).toFixed(1);
   const cashRows: [string, string][] = [
     ["Down Payment (" + estimate.downPaymentPercent + "%)", fmtCurrency(estimate.downPaymentAmount)],
-    ["Gross Closing Costs", fmtCurrency(Math.round(grossClosingTotal))],
+    ["Total Closing Costs (" + grossPct + "% of price)", fmtCurrency(estimate.grossClosingCosts)],
   ];
   if (additionalCredit > 0) {
-    cashRows.push(["Additional Seller Credit", "-" + fmtCurrency(additionalCredit)]);
+    const netPct = ((estimate.closingCosts / estimate.homePrice) * 100).toFixed(1);
+    cashRows.push(["Seller Credit", "-" + fmtCurrency(additionalCredit)]);
+    cashRows.push(["Net Closing Costs (" + netPct + "% of price)", fmtCurrency(estimate.closingCosts)]);
   }
   cashRows.push(["TOTAL CASH TO CLOSE", fmtCurrency(estimate.totalCashNeeded)]);
 
@@ -1828,19 +1832,30 @@ export default function HomePage() {
                       <span className="result-number">{fmtCurrency(estimate.downPaymentAmount)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-white/70">Est. Closing Costs</span>
+                      <span className="text-white/70">Total Closing Costs</span>
                       <span className="result-number">
-                        {fmtCurrency(estimate.closingCosts)}
+                        {fmtCurrency(estimate.grossClosingCosts)}
                         <span className="ml-1.5 text-white/50 text-xs font-normal">
-                          ({((estimate.closingCosts / estimate.homePrice) * 100).toFixed(1)}% of price)
+                          ({((estimate.grossClosingCosts / estimate.homePrice) * 100).toFixed(1)}% of price)
                         </span>
                       </span>
                     </div>
                     {(estimate.additionalSellerCredit ?? 0) > 0 && (
-                      <div className="flex justify-between" style={{ color: "#7ecbd6" }}>
-                        <span>Seller Credit</span>
-                        <span className="result-number">-{fmtCurrency(estimate.additionalSellerCredit!)}</span>
-                      </div>
+                      <>
+                        <div className="flex justify-between" style={{ color: "#7ecbd6" }}>
+                          <span>Seller Credit</span>
+                          <span className="result-number">-{fmtCurrency(estimate.additionalSellerCredit!)}</span>
+                        </div>
+                        <div className="flex justify-between border-t border-white/20 pt-1.5">
+                          <span className="text-white/70">Net Closing Costs</span>
+                          <span className="result-number">
+                            {fmtCurrency(estimate.closingCosts)}
+                            <span className="ml-1.5 text-white/50 text-xs font-normal">
+                              ({((estimate.closingCosts / estimate.homePrice) * 100).toFixed(1)}% of price)
+                            </span>
+                          </span>
+                        </div>
+                      </>
                     )}
                     {estimate.escrowWaived && (
                       <div className="text-xs text-white/50 pt-1 border-t border-white/15">
@@ -1886,7 +1901,12 @@ export default function HomePage() {
                   className="w-full flex items-center justify-between py-1 text-left group"
                 >
                   <CardTitle className="text-base font-semibold">
-                    Closing Costs Breakdown — <span style={{ color: "#1a3d5c" }}>{fmtCurrency(estimate.closingCosts)}</span>
+                    Closing Costs Breakdown — <span style={{ color: "#1a3d5c" }}>{fmtCurrency(estimate.grossClosingCosts)}</span>
+                    {(estimate.additionalSellerCredit ?? 0) > 0 && (
+                      <span className="ml-1 text-sm font-normal" style={{ color: "#007a8c" }}>
+                        (net {fmtCurrency(estimate.closingCosts)} after seller credit)
+                      </span>
+                    )}
                   </CardTitle>
                   {showClosingBreakdown
                     ? <ChevronUp className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />

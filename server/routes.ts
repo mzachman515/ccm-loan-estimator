@@ -1210,7 +1210,8 @@ export async function registerRoutes(httpServer: Server, app: Express) {
         mortgageInsurance: Math.round((monthlyPMI + monthlyMIP) * 100) / 100,
       },
       totalMonthlyPayment: Math.round(totalMonthly * 100) / 100,
-      closingCosts: Math.round(finalClosingCosts),
+      grossClosingCosts: Math.round(closingCosts),   // before any seller credit
+      closingCosts: Math.round(finalClosingCosts),     // net (after seller credit)
       closingCostBreakdown: finalClosingCostBreakdown,
       totalCashNeeded: Math.round(downPaymentAmount + finalClosingCosts),
       escrowWaived: !includeEscrow,
