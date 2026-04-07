@@ -91,6 +91,11 @@ interface EstimateResult {
   escrowWaived: boolean;
   sellerPaysTitle: boolean;
   sellerTitleCredit: number;
+  additionalSellerCredit?: number;
+  vaFundingFee?: number;
+  vaFundingFeeOption?: string;
+  vaFundingFeeRate?: number;
+  pmiOverrideRate?: number | null;
   rateSource: string;
   insuranceNote: string;
 }
@@ -103,6 +108,9 @@ const formSchema = z.object({
   downPaymentPercent: z.coerce.number().min(0).max(100),
   loanType: z.string().min(1, "Please select a loan type"),
   customRate: z.string().optional(),
+  pmiOverride: z.string().optional(),           // 0.01–2.00% override
+  vaFundingFeeOption: z.string().optional(),     // exempt | first_use | subsequent_use
+  additionalSellerCredit: z.string().optional(), // dollar amount
   propertyTax: z.coerce.number().min(0),
   hoaFee: z.coerce.number().min(0),
   closingDate: z.string().optional(),
@@ -578,7 +586,14 @@ function MarketDataPanel() {
   const treasuries = data?.data.filter(d => d.category === "treasury")  ?? [];
 
   const asOf = data?.data[0]?.date
-    ? new Date(data.data[0].date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    ? (() => {
+        const raw = data.data[0].date;
+        // Handle M/D/YY format from MND (e.g. "4/6/26") or YYYY-MM-DD from FRED
+        const d = raw.includes("/")
+          ? new Date(raw.replace(/^(\d+)\/(\d+)\/(\d+)$/, (_, m, day, y) => `20${y.length===2?y:y}-${m.padStart(2,'0')}-${day.padStart(2,'0')}`) + "T12:00:00")
+          : new Date(raw + "T12:00:00");
+        return isNaN(d.getTime()) ? raw : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      })()
     : null;
 
   function DataCell({ item }: { item: MarketDataPoint }) {
@@ -623,7 +638,7 @@ function MarketDataPanel() {
         </div>
         <span className="text-xs flex items-center gap-1.5" style={{ color: "#7ecbd6" }}>
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-          Optimal Blue OBMMI via FRED
+          Mortgage News Daily
         </span>
       </div>
 
@@ -650,7 +665,7 @@ function MarketDataPanel() {
 
       {/* Footer */}
       <div className="px-4 py-1.5 flex items-center justify-between" style={{ backgroundColor: "#0a1929" }}>
-        <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>Source: Optimal Blue OBMMI via FRED (St. Louis Fed) · Daily data, 1-day delayed</span>
+        <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>Source: Mortgage News Daily · Daily lender rate index</span>
         <span className="text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>▲ = higher rate  ▼ = lower rate</span>
       </div>
     </div>
@@ -681,6 +696,9 @@ export default function HomePage() {
       downPaymentPercent: 20,
       loanType: "conventional_30",
       customRate: "",
+      pmiOverride: "",
+      vaFundingFeeOption: "first_use",
+      additionalSellerCredit: "",
       propertyTax: 0,
       hoaFee: 0,
       closingDate: "",
@@ -728,9 +746,19 @@ export default function HomePage() {
         includeEscrow,
         sellerPaysTitle,
         floodInsuranceRequired,
-        // Only send customRate if it's a valid number > 0
+        // Custom rate: allow any valid decimal e.g. 5.99, 6.125
         customRate: values.customRate && parseFloat(values.customRate) > 0
           ? parseFloat(values.customRate)
+          : undefined,
+        // PMI override: only for conventional loans
+        pmiOverride: values.pmiOverride && parseFloat(values.pmiOverride) > 0
+          ? parseFloat(values.pmiOverride)
+          : undefined,
+        // VA funding fee option
+        vaFundingFeeOption: values.loanType === "va_30" ? (values.vaFundingFeeOption ?? "first_use") : undefined,
+        // Additional seller credit in dollars
+        additionalSellerCredit: values.additionalSellerCredit && parseFloat(values.additionalSellerCredit) > 0
+          ? parseFloat(values.additionalSellerCredit)
           : undefined,
       });
       return res.json() as Promise<EstimateResult>;
@@ -1053,13 +1081,20 @@ export default function HomePage() {
                           <div className="relative">
                             <Input
                               data-testid="input-custom-rate"
-                              type="number"
-                              step="0.125"
-                              min="0"
-                              max="20"
+                              type="text"
+                              inputMode="decimal"
                               placeholder={selectedRate ? selectedRate.rate.toFixed(2) : "6.50"}
                               className="pr-8"
-                              {...field}
+                              value={field.value}
+                              onChange={(e) => {
+                                // Allow typing any decimal: 5, 5.9, 5.99, 6.125 etc.
+                                const val = e.target.value;
+                                if (val === "" || /^\d{0,2}(\.\d{0,3})?$/.test(val)) {
+                                  field.onChange(val);
+                                }
+                              }}
+                              onBlur={field.onBlur}
+                              name={field.name}
                             />
                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
                           </div>
@@ -1070,6 +1105,154 @@ export default function HomePage() {
                                 Using custom rate: {parseFloat(field.value).toFixed(3)}%
                               </span>
                             : "Leave blank to use the national average for the selected loan type"}
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+
+                    {/* PMI override — conventional loans only, < 20% down */}
+                    {form.watch("loanType")?.startsWith("conventional") && form.watch("downPaymentPercent") < 20 && (
+                      <FormField control={form.control} name="pmiOverride" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="flex items-center gap-1.5">
+                            <DollarSign className="w-3.5 h-3.5" style={{ color: "#007a8c" }} />
+                            PMI Factor Override
+                            <span className="text-xs font-normal text-muted-foreground ml-1">(optional — overrides estimated PMI)</span>
+                          </FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Input
+                                data-testid="input-pmi-override"
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="e.g. 0.49"
+                                className="pr-8"
+                                value={field.value}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val === "" || /^\d{0,1}(\.\d{0,2})?$/.test(val)) {
+                                    field.onChange(val);
+                                  }
+                                }}
+                                onBlur={field.onBlur}
+                                name={field.name}
+                              />
+                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+                            </div>
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">
+                            {field.value && parseFloat(field.value) > 0
+                              ? <span className="font-medium" style={{ color: "#1a3d5c" }}>Using custom PMI: {parseFloat(field.value).toFixed(2)}%/yr</span>
+                              : "Enter 0.01–2.00. Leave blank to use MGIC rate table estimate."}
+                          </p>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    )}
+
+                    {/* VA Funding Fee selector — VA loans only */}
+                    {form.watch("loanType") === "va_30" && (
+                      <FormField control={form.control} name="vaFundingFeeOption" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="flex items-center gap-1.5">
+                            <Shield className="w-3.5 h-3.5" style={{ color: "#007a8c" }} />
+                            VA Funding Fee
+                            <span className="text-xs font-normal text-muted-foreground ml-1">(financed into loan)</span>
+                          </FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value ?? "first_use"}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-va-funding">
+                                <SelectValue placeholder="Select funding fee option" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="exempt">Exempt (0%) — service-connected disability</SelectItem>
+                              <SelectItem value="first_use">First Use — {form.watch("downPaymentPercent") >= 10 ? "1.40%" : form.watch("downPaymentPercent") >= 5 ? "1.65%" : "2.30%"}</SelectItem>
+                              <SelectItem value="subsequent_use">Subsequent Use — {form.watch("downPaymentPercent") >= 10 ? "1.40%" : form.watch("downPaymentPercent") >= 5 ? "1.65%" : "3.60%"}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            VA funding fee is added to the loan balance, not charged at closing.
+                          </p>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    )}
+
+                    {/* Additional seller credit */}
+                    <FormField control={form.control} name="additionalSellerCredit" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-1.5">
+                          <DollarSign className="w-3.5 h-3.5" style={{ color: "#007a8c" }} />
+                          Additional Seller Credit
+                          <span className="text-xs font-normal text-muted-foreground ml-1">(optional)</span>
+                        </FormLabel>
+                        <div className="space-y-2">
+                          {/* Quick % presets */}
+                          <div className="flex flex-wrap gap-1.5">
+                            {[0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6].map(pct => {
+                              const hp = form.watch("homePrice") || 0;
+                              const dollarAmt = hp > 0 ? Math.round(hp * pct / 100) : null;
+                              const isActive = dollarAmt !== null && field.value === String(dollarAmt);
+                              return (
+                                <button
+                                  key={pct}
+                                  type="button"
+                                  onClick={() => {
+                                    if (hp > 0) field.onChange(String(Math.round(hp * pct / 100)));
+                                  }}
+                                  className={`px-2.5 py-1 rounded text-xs font-semibold border transition-colors ${
+                                    isActive
+                                      ? "text-white border-transparent"
+                                      : "text-muted-foreground border-border hover:border-teal-400"
+                                  }`}
+                                  style={isActive ? { backgroundColor: "#007a8c", borderColor: "#007a8c" } : {}}
+                                >
+                                  {pct}%{dollarAmt ? ` (${fmtCurrency(dollarAmt)})` : ""}
+                                </button>
+                              );
+                            })}
+                            {field.value && (
+                              <button
+                                type="button"
+                                onClick={() => field.onChange("")}
+                                className="px-2.5 py-1 rounded text-xs font-semibold border border-red-200 text-red-400 hover:bg-red-50 transition-colors"
+                              >
+                                Clear
+                              </button>
+                            )}
+                          </div>
+                          {/* Manual dollar entry */}
+                          <FormControl>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                              <Input
+                                data-testid="input-seller-credit"
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="Or enter custom dollar amount"
+                                className="pl-7"
+                                value={field.value}
+                                onChange={(e) => {
+                                  const val = e.target.value.replace(/[^0-9]/g, "");
+                                  field.onChange(val);
+                                }}
+                                onBlur={field.onBlur}
+                                name={field.name}
+                              />
+                            </div>
+                          </FormControl>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {field.value && parseFloat(field.value) > 0
+                            ? (() => {
+                                const hp = form.watch("homePrice") || 0;
+                                const pct = hp > 0 ? ((parseFloat(field.value) / hp) * 100).toFixed(2) : null;
+                                return <span className="font-medium" style={{ color: "#1a3d5c" }}>
+                                  Seller credit: {fmtCurrency(parseFloat(field.value))}{pct ? ` (${pct}% of price)` : ""} — reduces cash to close
+                                </span>;
+                              })()
+                            : "Select a % preset above or type a dollar amount. Reduces buyer cash to close."}
                         </p>
                         <FormMessage />
                       </FormItem>
@@ -1334,7 +1517,7 @@ export default function HomePage() {
                   <div>{ratesData?.rates.map(rate => <RateBadge key={rate.key} rate={rate} />)}</div>
                 )}
                 <p className="text-xs text-muted-foreground mt-3 pt-2 border-t border-border">
-                  Optimal Blue OBMMI · April 5, 2026
+                  Mortgage News Daily
                 </p>
               </CardContent>
             </Card>
@@ -1451,6 +1634,11 @@ export default function HomePage() {
                       Includes {fmtCurrency(estimate.ufmip)} FHA Upfront MIP (1.75%) financed into loan
                     </p>
                   )}
+                  {(estimate.vaFundingFee ?? 0) > 0 && (
+                    <p className="text-xs px-3 py-1.5 rounded" style={{ color: "#007a8c", backgroundColor: "#f0f8fa" }}>
+                      Includes {fmtCurrency(estimate.vaFundingFee!)} VA Funding Fee ({estimate.vaFundingFeeRate?.toFixed(2)}% — {estimate.vaFundingFeeOption === "subsequent_use" ? "Subsequent Use" : "First Use"}) financed into loan
+                    </p>
+                  )}
                   <SummaryRow label="Loan Type" value={estimate.loanType} />
                   <SummaryRow label="Loan Term" value={`${estimate.loanTerm} Years`} />
                   <div className="flex justify-between items-center py-2.5">
@@ -1498,6 +1686,12 @@ export default function HomePage() {
                         </span>
                       </span>
                     </div>
+                    {(estimate.additionalSellerCredit ?? 0) > 0 && (
+                      <div className="flex justify-between" style={{ color: "#7ecbd6" }}>
+                        <span>Seller Credit</span>
+                        <span className="result-number">-{fmtCurrency(estimate.additionalSellerCredit!)}</span>
+                      </div>
+                    )}
                     {estimate.escrowWaived && (
                       <div className="text-xs text-white/50 pt-1 border-t border-white/15">
                         Escrow reserves waived
@@ -1581,6 +1775,11 @@ export default function HomePage() {
                   {estimate.sellerPaysTitle && estimate.sellerTitleCredit > 0 && (
                     <div className="mt-3 px-3 py-2 rounded-md text-xs" style={{ backgroundColor: "#e6f7f5", color: "#007a8c" }}>
                       Seller credit of {fmtCurrency(estimate.sellerTitleCredit)} for Owner's Title Insurance is reflected above.
+                    </div>
+                  )}
+                  {(estimate.additionalSellerCredit ?? 0) > 0 && (
+                    <div className="mt-2 px-3 py-2 rounded-md text-xs" style={{ backgroundColor: "#e6f7f5", color: "#007a8c" }}>
+                      Additional seller credit of {fmtCurrency(estimate.additionalSellerCredit!)} ({((estimate.additionalSellerCredit! / estimate.homePrice) * 100).toFixed(2)}% of price) — reduces buyer cash to close.
                     </div>
                   )}
                   <p className="text-xs text-muted-foreground mt-3">

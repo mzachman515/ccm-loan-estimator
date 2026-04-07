@@ -864,6 +864,16 @@ function calcClosingCosts(
   return { total, breakdown, sellerTitleCredit };
 }
 
+function applyAdditionalSellerCredit(
+  breakdown: Record<string, number | string>,
+  total: number,
+  credit: number
+): { breakdown: Record<string, number | string>; total: number } {
+  if (credit <= 0) return { breakdown, total };
+  const updated = { ...breakdown, "Additional Seller Credit": -credit };
+  return { breakdown: updated, total: total - credit };
+}
+
 // ─── Market data: fetch from FRED (free, no key required) ───────────────────
 
 interface MarketDataPoint {
@@ -901,63 +911,131 @@ async function fetchFredSeries(seriesId: string): Promise<{ value: number; prevV
   }
 }
 
+// ─── Mortgage News Daily rate scraper ────────────────────────────────────────
+// MND publishes the most accurate daily mortgage rates driven by real lender sheets.
+// We parse their public HTML rate table and cache it alongside FRED treasury data.
+
+interface MndRates {
+  conv30: number | null; conv15: number | null;
+  fha30: number | null;  va30: number | null;
+  jumbo30: number | null; arm: number | null;
+  date: string;
+}
+
+async function fetchMndRates(): Promise<MndRates> {
+  const fallback: MndRates = {
+    conv30: null, conv15: null, fha30: null,
+    va30: null, jumbo30: null, arm: null,
+    date: new Date().toISOString().slice(0, 10),
+  };
+  try {
+    const res = await axios.get("https://www.mortgagenewsdaily.com/mortgage-rates/mnd", {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+      },
+      timeout: 10000,
+    });
+    const html: string = res.data;
+
+    // Extract rates from the MND rate table
+    // Each row: <td>Product Name</td><td>6.43%</td>...
+    const extractRate = (label: string): number | null => {
+      // Match the label then capture the next percentage value
+      const re = new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\s\\S]{0,200}?([\\d]+\\.[\\d]{2})%', 'i');
+      const m = html.match(re);
+      return m ? parseFloat(m[1]) : null;
+    };
+
+    // Parse date from page
+    const dateMatch = html.match(/(\d{1,2}\/\d{1,2}\/\d{2,4})/) ;
+    const date = dateMatch ? dateMatch[1] : new Date().toISOString().slice(0, 10);
+
+    return {
+      conv30:  extractRate('30 Yr. Fixed'),
+      conv15:  extractRate('15 Yr. Fixed'),
+      fha30:   extractRate('30 Yr. FHA'),
+      va30:    extractRate('30 Yr. VA'),
+      jumbo30: extractRate('30 Yr. Jumbo'),
+      arm:     extractRate('7/6 SOFR ARM') ?? extractRate('7/1 ARM'),
+      date,
+    };
+  } catch (err) {
+    console.error("MND rate fetch error:", (err as any)?.message);
+    return fallback;
+  }
+}
+
 async function fetchMarketData(): Promise<MarketDataPoint[]> {
-  // Fetch all series in parallel
-  // OBMMI = Optimal Blue Mortgage Market Indices (daily, published on FRED)
-  // Better than Freddie Mac PMMS: daily frequency, covers all loan types
-  const [
-    conv30, fha30, va30, jumbo30, conv15,
-    t2, t5, t10, t30
-  ] = await Promise.all([
-    fetchFredSeries("OBMMIC30YF"),      // Optimal Blue conventional 30yr (daily)
-    fetchFredSeries("OBMMIFHA30YF"),    // Optimal Blue FHA 30yr (daily)
-    fetchFredSeries("OBMMIVA30YF"),     // Optimal Blue VA 30yr (daily)
-    fetchFredSeries("OBMMIJUMBO30YF"),  // Optimal Blue Jumbo 30yr (daily)
-    fetchFredSeries("OBMMIC15YF"),      // Optimal Blue conventional 15yr (daily)
-    fetchFredSeries("DGS2"),            // 2yr Treasury
-    fetchFredSeries("DGS5"),            // 5yr Treasury
-    fetchFredSeries("DGS10"),           // 10yr Treasury
-    fetchFredSeries("DGS30"),           // 30yr Treasury
+  // Fetch MND mortgage rates + FRED treasury yields in parallel
+  const [mnd, t2, t5, t10, t30] = await Promise.all([
+    fetchMndRates(),
+    fetchFredSeries("DGS2"),
+    fetchFredSeries("DGS5"),
+    fetchFredSeries("DGS10"),
+    fetchFredSeries("DGS30"),
   ]);
 
-  const r = (v: number, p: number) => Math.round((v - p) * 1000) / 1000;
   const results: MarketDataPoint[] = [];
+  const today = mnd.date;
 
-  // ── Mortgage Rates (Optimal Blue OBMMI — daily, all loan types) ──
-  if (conv30)  results.push({ label: "30-Yr Conventional", value: conv30.value,  change: r(conv30.value,  conv30.prevValue),  date: conv30.date,  category: "mortgage" });
-  if (fha30)   results.push({ label: "30-Yr FHA",           value: fha30.value,   change: r(fha30.value,   fha30.prevValue),   date: fha30.date,   category: "mortgage" });
-  if (va30)    results.push({ label: "30-Yr VA",            value: va30.value,    change: r(va30.value,    va30.prevValue),    date: va30.date,    category: "mortgage" });
-  if (jumbo30) results.push({ label: "30-Yr Jumbo",         value: jumbo30.value, change: r(jumbo30.value, jumbo30.prevValue), date: jumbo30.date, category: "mortgage" });
-  if (conv15)  results.push({ label: "15-Yr Conventional",  value: conv15.value,  change: r(conv15.value,  conv15.prevValue),  date: conv15.date,  category: "mortgage" });
+  // ── Mortgage Rates (Mortgage News Daily — daily lender sheet index) ──
+  // MND doesn't expose prev-day deltas in the HTML directly, so we track last cached value
+  // For first load, show 0.000 change; subsequent loads compare to cached
+  const prev = marketDataCache?.data ?? [];
+  const prevRate = (label: string) => prev.find(p => p.label === label)?.value ?? null;
 
-  // ── MBS Spread (30yr conv rate minus 10yr Treasury — key indicator) ──
-  if (conv30 && t10) {
-    const spread    = Math.round((conv30.value  - t10.value)     * 100) / 100;
-    const prevSpread = Math.round((conv30.prevValue - t10.prevValue) * 100) / 100;
+  const pushRate = (label: string, value: number | null) => {
+    if (!value) return;
+    const p = prevRate(label);
+    const change = p ? Math.round((value - p) * 1000) / 1000 : 0;
+    results.push({ label, value, change, date: today, category: "mortgage" });
+  };
+
+  pushRate("30-Yr Conventional", mnd.conv30);
+  pushRate("30-Yr FHA",          mnd.fha30);
+  pushRate("30-Yr VA",           mnd.va30);
+  pushRate("30-Yr Jumbo",        mnd.jumbo30);
+  pushRate("15-Yr Conventional", mnd.conv15);
+  if (mnd.arm) pushRate("7/6 ARM", mnd.arm);
+
+  // ── MBS Spread (30yr conv rate minus 10yr Treasury) ──
+  if (mnd.conv30 && t10) {
+    const spread = Math.round((mnd.conv30 - t10.value) * 100) / 100;
+    const prevConv = prevRate("30-Yr Conventional") ?? mnd.conv30;
+    const prevSpread = Math.round((prevConv - t10.prevValue) * 100) / 100;
     results.push({
       label: "Mtg-Treasury Spread",
       value: spread,
       change: Math.round((spread - prevSpread) * 1000) / 1000,
-      date: conv30.date,
+      date: today,
       category: "mbs",
     });
-    // Estimated UMBS 6.0 coupon price (simplified price model)
-    const umbsPrice = Math.round((100 - (conv30.value - 6.0) * 4) * 100) / 100;
-    const umbsPrev  = Math.round((100 - (conv30.prevValue - 6.0) * 4) * 100) / 100;
+    const umbsPrice = Math.round((100 - (mnd.conv30 - 6.0) * 4) * 100) / 100;
+    const umbsPrev  = Math.round((100 - (prevConv - 6.0) * 4) * 100) / 100;
     results.push({
       label: "UMBS 30YR 6.0 (est.)",
       value: umbsPrice,
       change: Math.round((umbsPrice - umbsPrev) * 1000) / 1000,
-      date: conv30.date,
+      date: today,
       category: "mbs",
     });
   }
 
-  // ── Treasury Yields ──
+  // ── Treasury Yields (FRED — unchanged) ──
+  const r = (v: number, p: number) => Math.round((v - p) * 1000) / 1000;
   if (t2)  results.push({ label: "2-Yr Treasury",  value: t2.value,  change: r(t2.value,  t2.prevValue),  date: t2.date,  category: "treasury" });
   if (t5)  results.push({ label: "5-Yr Treasury",  value: t5.value,  change: r(t5.value,  t5.prevValue),  date: t5.date,  category: "treasury" });
   if (t10) results.push({ label: "10-Yr Treasury", value: t10.value, change: r(t10.value, t10.prevValue), date: t10.date, category: "treasury" });
   if (t30) results.push({ label: "30-Yr Treasury", value: t30.value, change: r(t30.value, t30.prevValue), date: t30.date, category: "treasury" });
+
+  // Update live MORTGAGE_RATES from MND so loan estimates use current rates
+  if (mnd.conv30) { MORTGAGE_RATES.conventional_30.rate = mnd.conv30; }
+  if (mnd.conv15) { MORTGAGE_RATES.conventional_15.rate = mnd.conv15; }
+  if (mnd.fha30)  { MORTGAGE_RATES.fha_30.rate = mnd.fha30; }
+  if (mnd.va30)   { MORTGAGE_RATES.va_30.rate  = mnd.va30;  }
+  if (mnd.jumbo30){ MORTGAGE_RATES.jumbo_30.rate = mnd.jumbo30; }
+  if (mnd.arm)    { MORTGAGE_RATES.arm_7_1.rate  = mnd.arm;  }
 
   return results;
 }
@@ -981,7 +1059,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     res.json({
       rates: Object.entries(MORTGAGE_RATES).map(([key, val]) => ({
         key, label: val.label, rate: val.rate, termYears: val.termYears,
-        asOf: "April 5, 2026", source: "Optimal Blue OBMMI",
+        asOf: "April 5, 2026", source: "Mortgage News Daily",
       })),
     });
   });
@@ -1010,9 +1088,30 @@ export async function registerRoutes(httpServer: Server, app: Express) {
 
     const downPaymentAmount = homePrice * (downPaymentPercent / 100);
     const baseLoanAmount = homePrice - downPaymentAmount;
-    // FHA: 1.75% UFMIP is financed into the loan (not a closing cost)
+    const downPct = downPaymentPercent;
+
+    // FHA: 1.75% UFMIP financed into loan (not a closing cost)
     const ufmip = loanType === "fha_30" ? Math.round(baseLoanAmount * 0.0175) : 0;
-    const loanAmount = baseLoanAmount + ufmip;
+
+    // VA Funding Fee — financed into loan (not a closing cost)
+    // Options: exempt (0%), first_use, subsequent_use
+    // Rates per VA chart: Purchase First Use: 0%dn=2.3%, 5%dn=1.65%, 10%+dn=1.4%
+    //                     Purchase After First Use: 0%dn=3.6%, 5%dn=1.65%, 10%+dn=1.4%
+    const vaFundingFeeOption = (req.body.vaFundingFeeOption as string) ?? "first_use";
+    let vaFundingFeeRate = 0;
+    if (loanType === "va_30" && vaFundingFeeOption !== "exempt") {
+      if (downPct >= 10) {
+        vaFundingFeeRate = 0.0140; // 1.40% for both first and subsequent use
+      } else if (downPct >= 5) {
+        vaFundingFeeRate = 0.0165; // 1.65% for both first and subsequent use
+      } else {
+        // 0% down
+        vaFundingFeeRate = vaFundingFeeOption === "subsequent_use" ? 0.0360 : 0.0230;
+      }
+    }
+    const vaFundingFee = loanType === "va_30" ? Math.round(baseLoanAmount * vaFundingFeeRate) : 0;
+
+    const loanAmount = baseLoanAmount + ufmip + vaFundingFee;
     const { termYears } = rateInfo;
 
     // Use custom rate if provided (and valid), otherwise use the national average
@@ -1028,15 +1127,13 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     const monthlyFlood = floodInsuranceRequired ? Math.round((homePrice * 0.005) / 12 * 100) / 100 : 0;
     const monthlyMIP = loanType === "fha_30" ? (loanAmount * 0.0055) / 12 : 0;
 
-    // PMI rates by LTV — tiered based on MGIC/Fannie Mae published rate tables (assuming 700-739 credit score).
-    // Source: Urban Institute / MGIC Rate Finder 2024-2026
-    // LTV: 95-97% (3-5% down) → ~0.85%, 90-95% (5-10% down) → ~0.49%, 85-90% (10-15% down) → ~0.32%, 80-85% (15-19.99% down) → ~0.20%
+    // PMI: use override rate if provided, otherwise use MGIC tiered table
+    const pmiOverrideInput = req.body.pmiOverride ? parseFloat(String(req.body.pmiOverride)) : null;
+    const pmiOverrideRate = (pmiOverrideInput && pmiOverrideInput >= 0.01 && pmiOverrideInput <= 2.0)
+      ? pmiOverrideInput / 100  // convert % to decimal
+      : null;
+
     function getPmiRate(ltv: number): number {
-      // MGIC tiered rates — boundaries are inclusive on the upper end
-      // 95%+ LTV (< 5% down) → 0.85%
-      // 90–95% LTV (5–10% down) → 0.49%
-      // 85–90% LTV (10–15% down) → 0.32%
-      // 80–85% LTV (15–20% down) → 0.20%
       if (ltv >= 0.95) return 0.0085;
       if (ltv >= 0.90) return 0.0049;
       if (ltv >= 0.85) return 0.0032;
@@ -1044,8 +1141,9 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     }
     const ltv = loanAmount / homePrice;
     const isConventional = ["conventional_30", "conventional_15"].includes(loanType);
+    const effectivePmiRate = pmiOverrideRate ?? getPmiRate(ltv);
     const monthlyPMI = isConventional && downPaymentPercent < 20
-      ? Math.round((loanAmount * getPmiRate(ltv)) / 12 * 100) / 100 : 0;
+      ? Math.round((loanAmount * effectivePmiRate) / 12 * 100) / 100 : 0;
 
     const totalMonthly = monthlyPI + propertyTax + homeInsurance + monthlyFlood + hoaFee + monthlyMIP + monthlyPMI;
 
@@ -1071,23 +1169,39 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     // sellerPaysTitle defaults to true (FL default: seller pays owner's title + deed recording)
     const sellerPaysTitle = req.body.sellerPaysTitle !== false;
 
+    // Additional seller credit (reduces cash to close)
+    const additionalSellerCredit = req.body.additionalSellerCredit
+      ? Math.max(0, parseFloat(String(req.body.additionalSellerCredit)))
+      : 0;
+
     const { total: closingCosts, breakdown: closingCostBreakdown, sellerTitleCredit } = calcClosingCosts(
       homePrice, loanAmount, loanType, interestRate,
       propertyTax, homeInsurance, stateCode, closingDate, includeEscrow, prepaidDays, sellerPaysTitle,
       floodInsuranceRequired, monthlyFlood
     );
 
+    // Apply additional seller credit to breakdown + total
+    const {
+      breakdown: finalClosingCostBreakdown,
+      total: finalClosingCosts,
+    } = applyAdditionalSellerCredit(closingCostBreakdown, closingCosts, additionalSellerCredit);
+
     const saved = storage.saveLoanEstimate({
       address, homePrice, downPaymentPercent, loanType,
       loanTerm: termYears, interestRate, propertyTax,
-      hoaFee, homeInsurance, monthlyPayment: totalMonthly, closingCosts,
+      hoaFee, homeInsurance, monthlyPayment: totalMonthly, closingCosts: finalClosingCosts,
     });
 
     res.json({
       id: saved.id,
       address, homePrice, downPaymentPercent, downPaymentAmount, loanAmount,
       loanType: rateInfo.label, loanTerm: termYears, interestRate, rateIsCustom,
-      ufmip,  // FHA upfront MIP financed into loan (0 for non-FHA)
+      ufmip,          // FHA upfront MIP financed into loan (0 for non-FHA)
+      vaFundingFee,   // VA funding fee financed into loan (0 for non-VA or exempt)
+      vaFundingFeeOption: loanType === "va_30" ? vaFundingFeeOption : undefined,
+      vaFundingFeeRate: loanType === "va_30" ? Math.round(vaFundingFeeRate * 10000) / 100 : undefined,
+      pmiOverrideRate: pmiOverrideRate ? Math.round(pmiOverrideRate * 10000) / 100 : null,
+      additionalSellerCredit: additionalSellerCredit > 0 ? additionalSellerCredit : undefined,
       monthlyBreakdown: {
         principalAndInterest: Math.round(monthlyPI * 100) / 100,
         propertyTax: Math.round(propertyTax * 100) / 100,
@@ -1095,17 +1209,16 @@ export async function registerRoutes(httpServer: Server, app: Express) {
         flood: Math.round(monthlyFlood * 100) / 100,
         floodInsuranceRequired,
         hoa: hoaFee,
-        // PMI and MIP are both displayed as "Mortgage Insurance" in the breakdown
         mortgageInsurance: Math.round((monthlyPMI + monthlyMIP) * 100) / 100,
       },
       totalMonthlyPayment: Math.round(totalMonthly * 100) / 100,
-      closingCosts: Math.round(closingCosts),
-      closingCostBreakdown,
-      totalCashNeeded: Math.round(downPaymentAmount + closingCosts),
+      closingCosts: Math.round(finalClosingCosts),
+      closingCostBreakdown: finalClosingCostBreakdown,
+      totalCashNeeded: Math.round(downPaymentAmount + finalClosingCosts),
       escrowWaived: !includeEscrow,
       sellerPaysTitle,
       sellerTitleCredit,
-      rateSource: "Optimal Blue OBMMI — Daily National Average via FRED",
+      rateSource: "Mortgage News Daily — Daily National Average",
       insuranceNote: "Home insurance estimated at 0.8% of purchase price annually",
     });
   });

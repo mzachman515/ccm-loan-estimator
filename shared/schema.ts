@@ -35,4 +35,13 @@ export const loanEstimateRequestSchema = z.object({
   loanType: z.enum(["conventional_30", "conventional_15", "fha_30", "va_30", "jumbo_30", "arm_7_1"]),
   propertyTax: z.number().min(0),
   hoaFee: z.number().min(0),
+  // Optional overrides
+  customRate: z.union([z.string(), z.number(), z.null()]).optional(),
+  pmiOverride: z.union([z.string(), z.number(), z.null()]).optional(),   // 0.01–2.00%
+  vaFundingFeeOption: z.enum(["exempt", "first_use", "subsequent_use"]).optional(), // VA only
+  stateCode: z.string().optional(),
+  sellerPaysTitle: z.boolean().optional(),
+  includeEscrow: z.boolean().optional(),
+  floodInsuranceRequired: z.boolean().optional(),
+  closingDate: z.string().optional(),
 });
