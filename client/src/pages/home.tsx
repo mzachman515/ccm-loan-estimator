@@ -320,7 +320,43 @@ function AddressAutocomplete({
 
 // ─── PDF Generation ───────────────────────────────────────────────────────────
 
-function generatePDF(estimate: EstimateResult) {
+// Pre-load CCM logo as white PNG for PDF embedding on navy header
+let ccmLogoDataUrl: string | null = null;
+function loadCcmLogo(): Promise<string | null> {
+  if (ccmLogoDataUrl) return Promise.resolve(ccmLogoDataUrl);
+  return new Promise(resolve => {
+    fetch("https://crosscountrymortgage.com/app/themes/ccm-redesign/theme/assets/images/CCM_logo.svg")
+      .then(r => r.text())
+      .then(svgText => {
+        // Recolor all fills to white for use on dark navy background
+        const whiteSvg = svgText
+          .replace(/fill="#[0-9a-fA-F]{3,6}"/g, 'fill="#FFFFFF"')
+          .replace(/fill="rgb\([^)]+\)"/g, 'fill="#FFFFFF"');
+        const blob = new Blob([whiteSvg], { type: "image/svg+xml" });
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const scale = 4; // render at 4x for crisp PDF output
+          canvas.width = (img.naturalWidth || 283) * scale;
+          canvas.height = (img.naturalHeight || 45) * scale;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { URL.revokeObjectURL(url); return resolve(null); }
+          ctx.scale(scale, scale);
+          ctx.drawImage(img, 0, 0);
+          ccmLogoDataUrl = canvas.toDataURL("image/png");
+          URL.revokeObjectURL(url);
+          resolve(ccmLogoDataUrl);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+        img.src = url;
+      })
+      .catch(() => resolve(null));
+  });
+}
+
+async function generatePDF(estimate: EstimateResult) {
+  const logoDataUrl = await loadCcmLogo();
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
   const W = doc.internal.pageSize.getWidth();
   const margin = 14;
@@ -329,10 +365,18 @@ function generatePDF(estimate: EstimateResult) {
   // ── Header bar ──────────────────────────────────────────────────────────────
   doc.setFillColor(26, 61, 92);  // CCM navy
   doc.rect(0, 0, W, 22, "F");
+  // CCM logo on navy background
+  if (logoDataUrl) {
+    try { doc.addImage(logoDataUrl, "PNG", margin, 3.5, 42, 13); }
+    catch {
+      doc.setTextColor(255,255,255); doc.setFontSize(13); doc.setFont("helvetica","bold");
+      doc.text("CrossCountry Mortgage", margin, 9);
+    }
+  } else {
+    doc.setTextColor(255,255,255); doc.setFontSize(13); doc.setFont("helvetica","bold");
+    doc.text("CrossCountry Mortgage", margin, 9);
+  }
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(13);
-  doc.setFont("helvetica", "bold");
-  doc.text("CrossCountry Mortgage", margin, 9);
   doc.setFontSize(8);
   doc.setFont("helvetica", "normal");
   doc.text("Michael Zachman  ·  Loan Officer  ·  NMLS #1682867  ·  (561) 657-7750  ·  Michael.Zachman@ccm.com", margin, 15.5);
@@ -747,6 +791,7 @@ export default function HomePage() {
   const [floodInsuranceOverride, setFloodInsuranceOverride] = useState<string>("");
   const [showHomeInsOverride, setShowHomeInsOverride] = useState<boolean>(false);
   const [showFloodInsOverride, setShowFloodInsOverride] = useState<boolean>(false);
+  const [showDialIn, setShowDialIn] = useState<boolean>(false);
 
   const { data: ratesData, isLoading: ratesLoading } = useQuery<{ rates: MortgageRate[] }>({
     queryKey: ["/api/rates"],
@@ -1182,6 +1227,44 @@ export default function HomePage() {
                       </FormItem>
                     )} />
 
+                    {/* ── Loan Officer Dial-In Mode ────────────────────────── */}
+                    <div className="rounded-lg border overflow-hidden" style={{ borderColor: "#1a3d5c" }}>
+                      {/* Toggle header */}
+                      <button
+                        type="button"
+                        onClick={() => setShowDialIn(v => !v)}
+                        className="w-full flex items-center justify-between px-4 py-3 transition-colors"
+                        style={{ backgroundColor: showDialIn ? "#1a3d5c" : "#f0f4f8" }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                            style={{ color: showDialIn ? "#7ecbd6" : "#1a3d5c" }}>
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14"/>
+                            <path d="M15.54 8.46a5 5 0 0 1 0 7.07M8.46 15.54a5 5 0 0 1 0-7.07"/>
+                          </svg>
+                          <span className="text-sm font-semibold" style={{ color: showDialIn ? "white" : "#1a3d5c" }}>
+                            Loan Officer Dial-In Mode
+                          </span>
+                          {!showDialIn && (
+                            <span className="text-xs ml-1" style={{ color: "#5a7a9a" }}>
+                              — rate, points, PMI, VA fee overrides
+                            </span>
+                          )}
+                        </div>
+                        <ChevronDown
+                          className="w-4 h-4 transition-transform"
+                          style={{
+                            color: showDialIn ? "white" : "#1a3d5c",
+                            transform: showDialIn ? "rotate(180deg)" : "rotate(0deg)",
+                          }}
+                        />
+                      </button>
+
+                      {/* Collapsible fields */}
+                      {showDialIn && (
+                        <div className="px-4 pb-4 pt-3 space-y-4" style={{ backgroundColor: "#f8fbfc", borderTop: "1px solid #d0e4ee" }}>
+
                     {/* Custom interest rate override */}
                     <FormField control={form.control} name="customRate" render={({ field }) => (
                       <FormItem>
@@ -1375,6 +1458,10 @@ export default function HomePage() {
                         </FormItem>
                       )} />
                     )}
+
+                        </div>
+                      )}
+                    </div>
 
                     {/* Additional seller credit */}
                     <FormField control={form.control} name="additionalSellerCredit" render={({ field }) => (
@@ -1845,7 +1932,7 @@ export default function HomePage() {
             {/* Export PDF button */}
             <div className="flex justify-end no-print">
               <button
-                onClick={() => generatePDF(estimate)}
+                onClick={() => { generatePDF(estimate); }}
                 className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold border transition-opacity hover:opacity-80"
                 style={{ borderColor: "#1a3d5c", color: "#1a3d5c" }}
               >
