@@ -947,7 +947,16 @@ export default function HomePage() {
                         </a>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1.5">
+                    {/* County average tax rate — shown below the appraiser link */}
+                    {propertyData.taxRate && (
+                      <p className="text-xs mt-1.5" style={{ color: "#5a7a8a" }}>
+                        {propertyData.county} avg. effective tax rate: <strong>{propertyData.taxRate.toFixed(2)}%</strong>/yr
+                        {propertyData.taxRateSource && propertyData.taxRateSource !== `${propertyData.county} avg`
+                          ? ` · ${propertyData.taxRateSource}`
+                          : ""}
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-1">
                       Enter the home price below — property taxes will auto-calculate.
                     </p>
                   </div>
