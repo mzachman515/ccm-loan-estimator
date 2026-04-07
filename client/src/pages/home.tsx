@@ -768,22 +768,26 @@ export default function HomePage() {
       setPropertyData(data);
       if (data.stateCode) setStateCode(data.stateCode);
 
-      // If we got real tax data from the county appraiser, populate it now
-      if (data.taxFromParcel && data.propertyTax && data.propertyTax > 0) {
+      // Populate the tax field with whatever the backend resolved as the higher-of-two
+      // (backend already picks higher of parcel actual vs county avg rate × assessed value)
+      if (data.propertyTax && data.propertyTax > 0) {
         form.setValue("propertyTax", Math.round(data.propertyTax));
       }
 
       if (data.taxFromParcel && data.parcelId) {
         toast({
           title: "Property records found",
-          description: `Parcel #${data.parcelId} — assessed at ${data.assessedValue ? fmtCurrency(data.assessedValue) : "—"}. Annual tax: ${data.annualTax ? fmtCurrency(data.annualTax) : "—"}.`,
+          description: `Parcel #${data.parcelId} — assessed ${data.assessedValue ? fmtCurrency(data.assessedValue) : ""}. Monthly tax auto-populated: ${data.propertyTax ? fmtCurrency(Math.round(data.propertyTax)) + "/mo" : "—"} (higher of actual vs county avg).`,
+        });
+      } else if (data.propertyTax && data.propertyTax > 0) {
+        toast({
+          title: "Address confirmed",
+          description: `Monthly tax estimated at ${fmtCurrency(Math.round(data.propertyTax))}/mo based on ${data.taxRateSource ?? "county avg"} (${data.taxRate?.toFixed(2)}%).`,
         });
       } else {
         toast({
           title: "Address confirmed",
-          description: data.taxRateSource
-            ? `Enter the home price and we'll estimate taxes using the ${data.taxRateSource} (${data.taxRate?.toFixed(2)}%).`
-            : "Enter the home price, taxes, and HOA below.",
+          description: "Enter the home price, taxes, and HOA below.",
         });
       }
     },
@@ -863,15 +867,23 @@ export default function HomePage() {
   const watchedHomePrice = form.watch("homePrice");
   const watchedDownPct = form.watch("downPaymentPercent");
 
-  // Auto-calculate property tax whenever home price changes (using county/state rate from lookup)
-  // Only use the rate-based estimate if we do NOT have real parcel tax data.
-  // When taxFromParcel=true the actual tax was already set directly from the county appraiser.
+  // Auto-calculate property tax whenever home price changes.
+  // Rules:
+  //   • If real parcel tax exists (taxFromParcel), never overwrite — use the parcel value.
+  //   • If only county rate exists, recalculate from price and apply higher-of-two vs parcel estimate.
   useEffect(() => {
     const price = watchedHomePrice;
-    if (price > 0 && propertyData?.taxRate && !propertyData?.taxFromParcel) {
-      form.setValue("propertyTax", Math.round((price * (propertyData.taxRate / 100)) / 12));
+    if (!propertyData || price <= 0) return;
+
+    if (propertyData.taxFromParcel && propertyData.propertyTax) {
+      // Real parcel data: use it unchanged (backend already chose higher-of-two)
+      form.setValue("propertyTax", Math.round(propertyData.propertyTax));
+    } else if (propertyData.taxRate) {
+      // Rate-based estimate: recalculate as user changes home price
+      const rateMonthly = Math.round((price * (propertyData.taxRate / 100)) / 12);
+      form.setValue("propertyTax", rateMonthly);
     }
-  }, [watchedHomePrice, propertyData?.taxFromParcel]);
+  }, [watchedHomePrice, propertyData?.taxFromParcel, propertyData?.taxRate]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
