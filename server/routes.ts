@@ -201,6 +201,8 @@ async function geocodeAddress(address: string, magicKey?: string): Promise<Geoco
 // Free, no API key needed. Returns FLD_ZONE (e.g. "AE", "X"), ZONE_SUBTY, SFHA_TF
 
 async function fetchFemaFloodZone(lon: number, lat: number): Promise<string | null> {
+  // Retry up to 2 times — FEMA API can be slow from cloud IPs
+  for (let attempt = 0; attempt < 2; attempt++) {
   try {
     const res = await axios.get(
       "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer/28/query",
@@ -214,8 +216,11 @@ async function fetchFemaFloodZone(lon: number, lat: number): Promise<string | nu
           returnGeometry: "false",
           f: "json",
         },
-        headers: { "User-Agent": "CCM-LoanEstimator/1.0" },
-        timeout: 8000,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+          "Accept": "application/json",
+        },
+        timeout: 12000,
       }
     );
 
@@ -241,9 +246,13 @@ async function fetchFemaFloodZone(lon: number, lat: number): Promise<string | nu
     }
     return `${zone} Zone`;
   } catch (err) {
-    console.error("FEMA flood zone lookup error:", (err as any)?.message);
-    return null;
+    console.error(`FEMA flood zone lookup error (attempt ${attempt + 1}):`, (err as any)?.message);
+    if (attempt === 1) return null; // give up after 2 tries
+    // wait 500ms before retry
+    await new Promise(r => setTimeout(r, 500));
   }
+  } // end retry loop
+  return null;
 }
 
 // ─── Property lookup: geocode only (no Zillow) ───────────────────────────────

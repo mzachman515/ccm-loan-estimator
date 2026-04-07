@@ -53,7 +53,7 @@ async function lookupSarasota(address: string): Promise<ParcelResult> {
     const streetPart = address.split(",")[0].trim();
     const suggestRes = await axios.get(
       `https://www.sc-pa.com/propertysearch/api/srch/ListAddresses?term=${encodeURIComponent(streetPart)}`,
-      { headers: { ...JSON_HEADERS, "Referer": "https://www.sc-pa.com/propertysearch" }, timeout: 8000 }
+      { headers: { ...JSON_HEADERS, "Referer": "https://www.sc-pa.com/propertysearch" }, timeout: 15000 }
     );
 
     const suggestions: Array<{ Value: string; Category: string }> = suggestRes.data ?? [];
@@ -70,7 +70,7 @@ async function lookupSarasota(address: string): Promise<ParcelResult> {
           "Referer": "https://www.sc-pa.com/propertysearch",
         },
         maxRedirects: 0,
-        timeout: 8000,
+        timeout: 15000,
         validateStatus: (s) => s < 400,
       }
     );
@@ -86,7 +86,7 @@ async function lookupSarasota(address: string): Promise<ParcelResult> {
     // Fetch parcel page to extract assessed value
     const detailRes = await axios.get(
       `https://www.sc-pa.com/propertysearch/parcel/details/${parcelId}`,
-      { headers: { ...BROWSER_HEADERS, "Referer": "https://www.sc-pa.com/propertysearch" }, timeout: 8000 }
+      { headers: { ...BROWSER_HEADERS, "Referer": "https://www.sc-pa.com/propertysearch" }, timeout: 15000 }
     );
 
     const html: string = detailRes.data;
@@ -153,7 +153,7 @@ async function lookupCharlotte(address: string): Promise<ParcelResult> {
       `https://www.ccappraiser.com/taxestimator/TaxEstimators/PADSearch?term=${encodeURIComponent(streetPart)}`,
       {
         headers: { ...JSON_HEADERS, "Referer": "https://www.ccappraiser.com" },
-        timeout: 8000,
+        timeout: 15000,
       }
     );
 
@@ -170,7 +170,7 @@ async function lookupCharlotte(address: string): Promise<ParcelResult> {
     // Step 2: fetch parcel detail page
     const detailRes = await axios.get(parcelUrl, {
       headers: { ...BROWSER_HEADERS, "Referer": "https://www.ccappraiser.com" },
-      timeout: 10000,
+      timeout: 15000,
     });
 
     const html: string = detailRes.data;
@@ -277,7 +277,7 @@ async function lookupPalmBeach(address: string): Promise<ParcelResult> {
           "Accept": "application/json, text/javascript, */*; q=0.01",
           "X-Requested-With": "XMLHttpRequest",
         },
-        timeout: 8000,
+        timeout: 15000,
       }
     );
 
@@ -304,7 +304,7 @@ async function lookupPalmBeach(address: string): Promise<ParcelResult> {
       try {
         const resolveRes = await axios.get(
           `https://pbcpao.gov/Property/Details?parcelId=${encodeURIComponent(pcnDigits)}`,
-          { headers: { ...BROWSER_HEADERS, "Referer": "https://pbcpao.gov" }, timeout: 8000 }
+          { headers: { ...BROWSER_HEADERS, "Referer": "https://pbcpao.gov" }, timeout: 15000 }
         );
         const resolveHtml: string = resolveRes.data;
         // Full PCN appears as 17-digit number in parcelId= params
@@ -334,7 +334,7 @@ async function lookupPalmBeach(address: string): Promise<ParcelResult> {
         `https://pbcpao.gov/Property/GetTaxDetails?parcelId=${pcnDigits}`,
         {
           headers: { ...JSON_HEADERS, "Referer": "https://pbcpao.gov" },
-          timeout: 8000,
+          timeout: 15000,
         }
       );
       const taxData = taxRes.data;
@@ -445,7 +445,7 @@ async function lookupBroward(address: string): Promise<ParcelResult> {
         },
         maxRedirects: 0,
         validateStatus: (s) => s < 400,
-        timeout: 10000,
+        timeout: 15000,
       }
     );
 
@@ -489,7 +489,7 @@ async function lookupBroward(address: string): Promise<ParcelResult> {
             "X-Requested-With": "XMLHttpRequest",
             "Referer": "https://web.bcpa.net/BcpaClient/",
           },
-          timeout: 8000,
+          timeout: 15000,
         }
       );
 
