@@ -1462,6 +1462,66 @@ export default function HomePage() {
                         </div>
                       )}
                     </div>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <FormField control={form.control} name="propertyTax" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Monthly Property Tax</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                              <Input data-testid="input-property-tax" type="number" placeholder="500" className="pl-7" {...field} />
+                            </div>
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">
+                            {propertyData?.taxFromParcel
+                              ? <span className="font-medium" style={{ color: "#1a3d5c" }}>From county appraiser (parcel #{propertyData.parcelId})</span>
+                              : propertyData?.taxRateSource
+                              ? `Auto-calculated · ${propertyData.taxRateSource} (${propertyData.taxRate?.toFixed(2)}%/yr)`
+                              : "Auto-calculated from county avg · adjustable"}
+                          </p>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+
+                      <FormField control={form.control} name="hoaFee" render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Monthly HOA Fee</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                              <Input data-testid="input-hoa-fee" type="number" placeholder="0" className="pl-7" {...field} />
+                            </div>
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">Enter 0 if no HOA</p>
+                          <FormMessage />
+                        </FormItem>
+                      )} />
+                    </div>
+
+                    {/* Closing Date */}
+                    <FormField control={form.control} name="closingDate" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5" style={{ color: "#007a8c" }} />
+                          Estimated Closing Date
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            data-testid="input-closing-date"
+                            type="date"
+                            min={new Date().toISOString().split("T")[0]}
+                            className="w-full"
+                            {...field}
+                          />
+                        </FormControl>
+                        <p className="text-xs text-muted-foreground">
+                          {field.value
+                            ? `Prepaid interest calculated through end of ${new Date(field.value + "T12:00:00").toLocaleDateString("en-US", { month: "long" })}`
+                            : "Leave blank to default to 5 days prepaid interest"}
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
 
                     {/* Additional seller credit */}
                     <FormField control={form.control} name="additionalSellerCredit" render={({ field }) => (
@@ -1542,66 +1602,6 @@ export default function HomePage() {
                       </FormItem>
                     )} />
 
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <FormField control={form.control} name="propertyTax" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Monthly Property Tax</FormLabel>
-                          <FormControl>
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                              <Input data-testid="input-property-tax" type="number" placeholder="500" className="pl-7" {...field} />
-                            </div>
-                          </FormControl>
-                          <p className="text-xs text-muted-foreground">
-                            {propertyData?.taxFromParcel
-                              ? <span className="font-medium" style={{ color: "#1a3d5c" }}>From county appraiser (parcel #{propertyData.parcelId})</span>
-                              : propertyData?.taxRateSource
-                              ? `Auto-calculated · ${propertyData.taxRateSource} (${propertyData.taxRate?.toFixed(2)}%/yr)`
-                              : "Auto-calculated from county avg · adjustable"}
-                          </p>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-
-                      <FormField control={form.control} name="hoaFee" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Monthly HOA Fee</FormLabel>
-                          <FormControl>
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                              <Input data-testid="input-hoa-fee" type="number" placeholder="0" className="pl-7" {...field} />
-                            </div>
-                          </FormControl>
-                          <p className="text-xs text-muted-foreground">Enter 0 if no HOA</p>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
-                    </div>
-
-                    {/* Closing Date */}
-                    <FormField control={form.control} name="closingDate" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5" style={{ color: "#007a8c" }} />
-                          Estimated Closing Date
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            data-testid="input-closing-date"
-                            type="date"
-                            min={new Date().toISOString().split("T")[0]}
-                            className="w-full"
-                            {...field}
-                          />
-                        </FormControl>
-                        <p className="text-xs text-muted-foreground">
-                          {field.value
-                            ? `Prepaid interest calculated through end of ${new Date(field.value + "T12:00:00").toLocaleDateString("en-US", { month: "long" })}`
-                            : "Leave blank to default to 5 days prepaid interest"}
-                        </p>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
 
                     {/* Home Insurance — with optional monthly override */}
                     <div className="rounded-lg border text-sm" style={{ backgroundColor: "#f0f8fa", borderColor: "#b3dde3" }}>
