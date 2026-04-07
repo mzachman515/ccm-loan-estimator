@@ -177,21 +177,13 @@ async function lookupCharlotte(address: string): Promise<ParcelResult> {
     let floodZone: string | null = null;
     const taxYear = 2025;
 
-    // Extract Certified Just Value from Charlotte County page
-    // HTML pattern: <strong>Certified Just Value</strong>...</td><td>$NNN,NNN</td>
-    const justMatch =
-      html.match(/Certified\s+Just\s+Value[^<]*<\/strong>[\s\S]{0,500}?<\/td>[\s\S]{0,200}?>\s*\$([\d,]+)/) ??
-      html.match(/Just\s+Value[^<]*<\/strong>[\s\S]{0,500}?<\/td>[\s\S]{0,200}?>\s*\$([\d,]+)/i);
-    if (justMatch) {
-      assessedValue = parseDollar(justMatch[1]);
-    }
-    if (!assessedValue) {
-      // Fallback: find first large dollar amount in the page (Just Value typically comes first)
-      const amounts = html.match(/\$([\d]{2,3},[\d]{3})/g);
-      if (amounts?.length) {
-        const values = amounts.map(a => parseDollar(a)).filter(v => v && v > 50000) as number[];
-        if (values.length) assessedValue = values[0]; // first match, not largest (avoid totals)
-      }
+    // Extract Just Value from Charlotte County page
+    // Pattern: find "Just Value" then grab the first $NNN,NNN that follows
+    const justIdx = html.search(/Just\s+Value/i);
+    if (justIdx >= 0) {
+      const chunk = html.slice(justIdx, justIdx + 600);
+      const m = chunk.match(/\$([0-9,]+)/);
+      if (m) assessedValue = parseDollar(m[1]);
     }
 
     // Extract FEMA Flood Zone

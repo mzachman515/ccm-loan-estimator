@@ -777,6 +777,10 @@ export default function HomePage() {
       if (data.taxFromParcel && data.propertyTax && data.propertyTax > 0) {
         form.setValue("propertyTax", Math.round(data.propertyTax));
       }
+      // Auto-enable flood insurance if property is in a high-risk FEMA zone
+      if (data.floodZone && /^(AE|VE|AH|AO|AR|A[0-9]|A$|V$)/i.test(data.floodZone)) {
+        setFloodInsuranceRequired(true);
+      }
 
       if (data.taxFromParcel && data.parcelId) {
         toast({
@@ -1016,21 +1020,33 @@ export default function HomePage() {
                           Assessed: {fmtCurrency(propertyData.assessedValue)}
                         </Badge>
                       )}
-                      {propertyData.floodZone && (
-                        <Badge
-                          variant="outline"
-                          className="text-xs font-semibold"
-                          style={{
-                            borderColor: propertyData.floodZone.match(/^(AE|VE|A[0-9]?|V)/i)
-                              ? "#c0392b" : "#27ae60",
-                            color: propertyData.floodZone.match(/^(AE|VE|A[0-9]?|V)/i)
-                              ? "#c0392b" : "#27ae60",
-                          }}
-                        >
-                          Flood Zone: {propertyData.floodZone}
-                        </Badge>
-                      )}
                     </div>
+                    {/* Flood Zone banner — shown prominently when available */}
+                    {propertyData.floodZone && (() => {
+                      const isHighRisk = /^(AE|VE|AH|AO|AR|A[0-9]|A$|V$)/i.test(propertyData.floodZone);
+                      const isModerate = /^(X500|B$|Shaded X)/i.test(propertyData.floodZone);
+                      const bgColor = isHighRisk ? "#fff0ee" : isModerate ? "#fffbea" : "#f0faf4";
+                      const borderColor = isHighRisk ? "#e74c3c" : isModerate ? "#f39c12" : "#27ae60";
+                      const textColor = isHighRisk ? "#c0392b" : isModerate ? "#d68910" : "#1e8449";
+                      const icon = isHighRisk ? "⚠" : isModerate ? "◈" : "✓";
+                      const label = isHighRisk
+                        ? "High-risk flood zone — flood insurance typically required by lender"
+                        : isModerate
+                        ? "Moderate flood risk — flood insurance may be recommended"
+                        : "Minimal flood risk — outside FEMA special flood hazard area";
+                      return (
+                        <div
+                          className="flex items-start gap-2 mt-2 px-3 py-2 rounded-md text-xs"
+                          style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}` }}
+                        >
+                          <span className="font-bold text-sm shrink-0" style={{ color: textColor }}>{icon}</span>
+                          <div>
+                            <span className="font-bold" style={{ color: textColor }}>FEMA Flood Zone: {propertyData.floodZone}</span>
+                            <span className="ml-1.5" style={{ color: textColor, opacity: 0.85 }}>— {label}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
                     {/* County Property Appraiser deep link + Zillow link */}
                     <div className="flex flex-wrap gap-2 mt-2">
                       {propertyData.appraisalUrl && (
