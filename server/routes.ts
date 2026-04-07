@@ -783,6 +783,7 @@ function calcClosingCosts(
   sellerPaysTitle: boolean = true,
   floodInsuranceRequired: boolean = false,
   monthlyFlood: number = 0,
+  discountPoints: number = 0,  // % of loan amount e.g. 1.0 = 1 point
 ) {
   const state = getStateClosingFees(stateCode);
   const isFL = stateCode.toUpperCase() === "FL";
@@ -792,6 +793,12 @@ function calcClosingCosts(
     "Lender Fees (Processing & Underwriting)": 1690,
     "Appraisal Fee":                            650,
   };
+  // Discount points: buyer pays X% of loan amount upfront to buy down the rate
+  if (discountPoints > 0 && discountPoints <= 2.0) {
+    const pts = parseFloat(discountPoints.toFixed(4));
+    const ptsCost = Math.round(loanAmount * (discountPoints / 100));
+    lenderFees[`Discount Points (${pts}%)`] = ptsCost;
+  }
   // NOTE: FHA Upfront MIP (1.75%) is NOT a closing cost — it is financed into the loan balance.
   // It does not appear in the closing cost worksheet.
 
@@ -1233,10 +1240,17 @@ export async function registerRoutes(httpServer: Server, app: Express) {
       ? Math.max(0, parseFloat(String(req.body.additionalSellerCredit)))
       : 0;
 
+    // Discount points
+    const discountPointsInput = req.body.discountPoints
+      ? parseFloat(String(req.body.discountPoints))
+      : 0;
+    const discountPoints = (discountPointsInput > 0 && discountPointsInput <= 2.0)
+      ? discountPointsInput : 0;
+
     const { total: closingCosts, breakdown: closingCostBreakdown, sellerTitleCredit } = calcClosingCosts(
       homePrice, loanAmount, loanType, interestRate,
       propertyTax, homeInsurance, stateCode, closingDate, includeEscrow, prepaidDays, sellerPaysTitle,
-      floodInsuranceRequired, monthlyFlood
+      floodInsuranceRequired, monthlyFlood, discountPoints
     );
 
     // Apply additional seller credit to breakdown + total
@@ -1261,6 +1275,8 @@ export async function registerRoutes(httpServer: Server, app: Express) {
       vaFundingFeeRate: loanType === "va_30" ? Math.round(vaFundingFeeRate * 10000) / 100 : undefined,
       pmiOverrideRate: pmiOverrideRate ? Math.round(pmiOverrideRate * 10000) / 100 : null,
       additionalSellerCredit: additionalSellerCredit > 0 ? additionalSellerCredit : undefined,
+      discountPoints: discountPoints > 0 ? discountPoints : undefined,
+      discountPointsCost: discountPoints > 0 ? Math.round(loanAmount * (discountPoints / 100)) : undefined,
       monthlyBreakdown: {
         principalAndInterest: Math.round(monthlyPI * 100) / 100,
         propertyTax: Math.round(propertyTax * 100) / 100,

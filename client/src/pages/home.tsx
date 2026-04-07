@@ -92,6 +92,8 @@ interface EstimateResult {
   sellerPaysTitle: boolean;
   sellerTitleCredit: number;
   grossClosingCosts: number;      // total before any seller credit
+  discountPoints?: number;         // % of loan amount
+  discountPointsCost?: number;     // dollar cost
   additionalSellerCredit?: number;
   vaFundingFee?: number;
   vaFundingFeeOption?: string;
@@ -109,6 +111,7 @@ const formSchema = z.object({
   downPaymentPercent: z.coerce.number().min(0).max(100),
   loanType: z.string().min(1, "Please select a loan type"),
   customRate: z.string().optional(),
+  discountPoints: z.string().optional(),        // 0.025–2.00% of loan amount
   pmiOverride: z.string().optional(),           // 0.01–2.00% override
   vaFundingFeeOption: z.string().optional(),     // exempt | first_use | subsequent_use
   additionalSellerCredit: z.string().optional(), // dollar amount
@@ -401,6 +404,9 @@ function generatePDF(estimate: EstimateResult) {
   ];
   if (estimate.ufmip > 0) {
     loanRows.push(["FHA UFMIP Financed", fmtCurrency(estimate.ufmip)]);
+  }
+  if ((estimate.discountPointsCost ?? 0) > 0) {
+    loanRows.push([`Discount Points (${estimate.discountPoints}%)`, fmtCurrency(estimate.discountPointsCost!)]);
   }
 
   // Monthly Breakdown header (right column, same y start)
@@ -754,6 +760,7 @@ export default function HomePage() {
       downPaymentPercent: 20,
       loanType: "conventional_30",
       customRate: "",
+      discountPoints: "",
       pmiOverride: "",
       vaFundingFeeOption: "first_use",
       additionalSellerCredit: "",
@@ -815,6 +822,10 @@ export default function HomePage() {
         // Custom rate: allow any valid decimal e.g. 5.99, 6.125
         customRate: values.customRate && parseFloat(values.customRate) > 0
           ? parseFloat(values.customRate)
+          : undefined,
+        // Discount points
+        discountPoints: values.discountPoints && parseFloat(values.discountPoints) > 0
+          ? parseFloat(values.discountPoints)
           : undefined,
         // PMI override: only for conventional loans
         pmiOverride: values.pmiOverride && parseFloat(values.pmiOverride) > 0
@@ -1207,6 +1218,90 @@ export default function HomePage() {
                                 Using custom rate: {parseFloat(field.value).toFixed(3)}%
                               </span>
                             : "Leave blank to use the national average for the selected loan type"}
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+
+                    {/* Discount Points — optional, adds to lender fees */}
+                    <FormField control={form.control} name="discountPoints" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-1.5">
+                          <TrendingDown className="w-3.5 h-3.5" style={{ color: "#007a8c" }} />
+                          Mortgage Discount Points
+                          <span className="text-xs font-normal text-muted-foreground ml-1">(optional — added to lender fees)</span>
+                        </FormLabel>
+                        <div className="space-y-2">
+                          {/* Quick-select presets */}
+                          <div className="flex flex-wrap gap-1.5">
+                            {[0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0].map(pts => {
+                              const loan = (() => {
+                                const hp = form.watch("homePrice") || 0;
+                                const dp = form.watch("downPaymentPercent") || 20;
+                                return hp > 0 ? Math.round(hp * (1 - dp / 100)) : 0;
+                              })();
+                              const cost = loan > 0 ? Math.round(loan * pts / 100) : null;
+                              const isActive = field.value === String(pts);
+                              return (
+                                <button
+                                  key={pts}
+                                  type="button"
+                                  onClick={() => field.onChange(String(pts))}
+                                  className={`px-2.5 py-1 rounded text-xs font-semibold border transition-colors ${
+                                    isActive ? "text-white border-transparent" : "text-muted-foreground border-border hover:border-teal-400"
+                                  }`}
+                                  style={isActive ? { backgroundColor: "#007a8c", borderColor: "#007a8c" } : {}}
+                                >
+                                  {pts}%{cost ? ` (${fmtCurrency(cost)})` : ""}
+                                </button>
+                              );
+                            })}
+                            {field.value && (
+                              <button
+                                type="button"
+                                onClick={() => field.onChange("")}
+                                className="px-2.5 py-1 rounded text-xs font-semibold border border-red-200 text-red-400 hover:bg-red-50 transition-colors"
+                              >
+                                Clear
+                              </button>
+                            )}
+                          </div>
+                          {/* Manual input */}
+                          <FormControl>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="Or enter custom % (e.g. 0.375)"
+                                value={field.value}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  if (val === "" || /^\d{0,1}(\.\d{0,3})?$/.test(val)) field.onChange(val);
+                                }}
+                                onBlur={field.onBlur}
+                                name={field.name}
+                                className="w-full pr-8 pl-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-1"
+                                style={{ borderColor: "#b3dde3" }}
+                              />
+                              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">%</span>
+                            </div>
+                          </FormControl>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {field.value && parseFloat(field.value) > 0
+                            ? (() => {
+                                const pts = parseFloat(field.value);
+                                const loan = (() => {
+                                  const hp = form.watch("homePrice") || 0;
+                                  const dp = form.watch("downPaymentPercent") || 20;
+                                  return hp > 0 ? Math.round(hp * (1 - dp / 100)) : 0;
+                                })();
+                                const cost = loan > 0 ? fmtCurrency(Math.round(loan * pts / 100)) : "";
+                                return <span className="font-medium" style={{ color: "#1a3d5c" }}>
+                                  {pts} point{pts !== 1 ? "s" : ""} — {cost ? `${cost} added to closing costs` : "enter home price to see cost"}
+                                </span>;
+                              })()
+                            : "1 point = 1% of loan amount. Added under Lender Fees on the closing worksheet."}
                         </p>
                         <FormMessage />
                       </FormItem>
@@ -1810,6 +1905,11 @@ export default function HomePage() {
                   {(estimate.vaFundingFee ?? 0) > 0 && (
                     <p className="text-xs px-3 py-1.5 rounded" style={{ color: "#007a8c", backgroundColor: "#f0f8fa" }}>
                       Includes {fmtCurrency(estimate.vaFundingFee!)} VA Funding Fee ({estimate.vaFundingFeeRate?.toFixed(2)}% — {estimate.vaFundingFeeOption === "subsequent_use" ? "Subsequent Use" : "First Use"}) financed into loan
+                    </p>
+                  )}
+                  {(estimate.discountPointsCost ?? 0) > 0 && (
+                    <p className="text-xs px-3 py-1.5 rounded" style={{ color: "#1a3d5c", backgroundColor: "#f0f8fa" }}>
+                      {estimate.discountPoints} discount point{estimate.discountPoints !== 1 ? "s" : ""} — {fmtCurrency(estimate.discountPointsCost!)} added to lender fees
                     </p>
                   )}
                   <SummaryRow label="Loan Type" value={estimate.loanType} />
