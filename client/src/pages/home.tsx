@@ -1430,7 +1430,7 @@ export default function HomePage() {
                     )} />
 
                     {/* PMI override — conventional + ARM loans, < 20% down */}
-                    {["conventional_30", "conventional_15", "arm_7_1"].includes(form.watch("loanType")) && form.watch("downPaymentPercent") < 20 && (
+                    {["conventional_30", "conventional_15", "arm_7_1"].includes(form.watch("loanType")) && Number(form.watch("downPaymentPercent")) < 20 && (
                       <FormField control={form.control} name="pmiOverride" render={({ field }) => (
                         <FormItem>
                           <FormLabel className="flex items-center gap-1.5">
