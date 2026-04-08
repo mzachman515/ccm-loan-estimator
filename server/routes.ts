@@ -13,7 +13,7 @@ const MORTGAGE_RATES: Record<string, { rate: number; label: string; termYears: n
   fha_30:          { rate: 6.28, label: "30-Year Fixed (FHA)",          termYears: 30 },
   va_30:           { rate: 6.38, label: "30-Year Fixed (VA)",           termYears: 30 },
   jumbo_30:        { rate: 6.55, label: "30-Year Fixed (Jumbo)",        termYears: 30 },
-  arm_7_1:         { rate: 6.11, label: "7/1 Adjustable Rate (ARM)",   termYears: 30 },
+  arm_7_1:         { rate: 6.11, label: "7/6 Adjustable Rate (ARM)",   termYears: 30 },
 };
 
 // ─── County-level effective property tax rates (%) ───────────────────────────
@@ -1221,9 +1221,9 @@ export async function registerRoutes(httpServer: Server, app: Express) {
       return 0.0020;
     }
     const ltv = loanAmount / homePrice;
-    const isConventional = ["conventional_30", "conventional_15"].includes(loanType);
+    const hasPMI = ["conventional_30", "conventional_15", "arm_7_1"].includes(loanType);
     const effectivePmiRate = pmiOverrideRate ?? getPmiRate(ltv);
-    const monthlyPMI = isConventional && downPaymentPercent < 20
+    const monthlyPMI = hasPMI && downPaymentPercent < 20
       ? Math.round((loanAmount * effectivePmiRate) / 12 * 100) / 100 : 0;
 
     const totalMonthly = monthlyPI + propertyTax + homeInsurance + monthlyFlood + hoaFee + monthlyMIP + monthlyPMI;
