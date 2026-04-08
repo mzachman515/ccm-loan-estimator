@@ -444,7 +444,7 @@ async function generatePDF(estimate: EstimateResult) {
     ["Loan Amount", fmtCurrency(estimate.loanAmount)],
     ["Loan Type", estimate.loanType],
     ["Term", estimate.loanTerm + " Years"],
-    ["Interest Rate", fmtRate(estimate.interestRate) + (estimate.rateIsCustom ? " (custom)" : "")],
+    ["Interest Rate", fmtRate(estimate.interestRate)],
   ];
   if (estimate.ufmip > 0) {
     loanRows.push(["FHA UFMIP Financed", fmtCurrency(estimate.ufmip)]);
@@ -2068,11 +2068,7 @@ export default function HomePage() {
                     <span>Interest Rate</span>
                     <span className="flex items-center gap-2 result-number">
                       {fmtRate(estimate.interestRate)}
-                      {estimate.rateIsCustom && (
-                        <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor: "#1a3d5c", color: "white" }}>
-                          Custom
-                        </span>
-                      )}
+
                     </span>
                   </div>
                 </CardContent>
