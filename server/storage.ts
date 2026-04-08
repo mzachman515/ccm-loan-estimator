@@ -27,6 +27,7 @@ sqlite.exec(`
 export interface IStorage {
   saveLoanEstimate(estimate: InsertLoanEstimate): LoanEstimate;
   getRecentEstimates(limit?: number): LoanEstimate[];
+  getRecentAddresses(limit?: number): { address: string; homePrice: number; loanType: string }[];
 }
 
 export class Storage implements IStorage {
@@ -36,6 +37,22 @@ export class Storage implements IStorage {
 
   getRecentEstimates(limit: number = 10): LoanEstimate[] {
     return db.select().from(schema.loanEstimates).all().slice(-limit).reverse();
+  }
+
+  getRecentAddresses(limit: number = 20): { address: string; homePrice: number; loanType: string }[] {
+    // Get unique addresses, most recent first
+    const all = db.select().from(schema.loanEstimates).all().reverse();
+    const seen = new Set<string>();
+    const results: { address: string; homePrice: number; loanType: string }[] = [];
+    for (const row of all) {
+      const key = row.address.toLowerCase().trim();
+      if (!seen.has(key)) {
+        seen.add(key);
+        results.push({ address: row.address, homePrice: row.homePrice, loanType: row.loanType });
+      }
+      if (results.length >= limit) break;
+    }
+    return results;
   }
 }
 

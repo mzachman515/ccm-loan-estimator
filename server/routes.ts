@@ -1120,6 +1120,12 @@ export async function registerRoutes(httpServer: Server, app: Express) {
     res.json({ data, fetchedAt: new Date(now).toISOString(), cached: false });
   });
 
+  // Recent addresses for quick-select
+  app.get("/api/recent-addresses", (_req, res) => {
+    const addresses = storage.getRecentAddresses(20);
+    res.json({ addresses });
+  });
+
   app.get("/api/rates", (_req, res) => {
     res.json({
       rates: Object.entries(MORTGAGE_RATES).map(([key, val]) => ({

@@ -17,7 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Home, Search, DollarSign, TrendingDown, Calendar,
+  Home, Search, DollarSign, TrendingDown, Calendar, RotateCcw,
   Shield, ChevronDown, ChevronUp, Info, Phone, Mail, ExternalLink, MapPin
 } from "lucide-react";
 
@@ -797,6 +797,14 @@ export default function HomePage() {
     queryKey: ["/api/rates"],
   });
 
+  // Recent addresses from past estimates
+  const { data: recentData, refetch: refetchRecent } = useQuery<{
+    addresses: { address: string; homePrice: number; loanType: string }[];
+  }>({
+    queryKey: ["/api/recent-addresses"],
+  });
+  const recentAddresses = recentData?.addresses ?? [];
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -894,6 +902,7 @@ export default function HomePage() {
     },
     onSuccess: (data) => {
       setEstimate(data);
+      refetchRecent(); // refresh recent addresses list
       setTimeout(() => {
         document.getElementById("results")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 100);
@@ -1040,6 +1049,31 @@ export default function HomePage() {
                   <Info className="w-3 h-3 shrink-0" />
                   Suggestions appear as you type. Select an address to confirm it and auto-calculate property taxes.
                 </p>
+
+                {/* Recent addresses from past estimates */}
+                {recentAddresses.length > 0 && !propertyData && (
+                  <div className="mt-2">
+                    <p className="text-xs font-semibold text-muted-foreground mb-1.5">Recent Addresses</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {recentAddresses.slice(0, 8).map((r, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => {
+                            form.setValue("address", r.address);
+                            lookupMutation.mutate({ address: r.address });
+                          }}
+                          className="px-2.5 py-1.5 rounded-md text-xs border border-border bg-background text-foreground hover:border-teal-400 transition-colors text-left"
+                        >
+                          <span className="font-medium">{r.address.split(",")[0]}</span>
+                          <span className="text-muted-foreground ml-1">
+                            {r.address.split(",").slice(1, 3).join(",").trim()}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Loading skeleton */}
                 {lookupMutation.isPending && (
@@ -1793,6 +1827,30 @@ export default function HomePage() {
                       {estimateMutation.isPending
                         ? <span className="flex items-center gap-2"><Spinner /> Calculating...</span>
                         : <span className="flex items-center gap-2"><Home className="w-4 h-4" /> Generate Loan Estimate</span>}
+                    </Button>
+                    {/* Reset button */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full mt-2"
+                      style={{ borderColor: "#c0533a", color: "#c0533a" }}
+                      onClick={() => {
+                        form.reset();
+                        setPropertyData(null);
+                        setEstimate(null);
+                        setStateCode("");
+                        setFloodInsuranceRequired(false);
+                        setHomeInsuranceOverride("");
+                        setFloodInsuranceOverride("");
+                        setShowHomeInsOverride(false);
+                        setShowFloodInsOverride(false);
+                        setShowDialIn(false);
+                        setShowClosingBreakdown(false);
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }}
+                    >
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Reset Estimate
                     </Button>
                   </form>
                 </Form>
