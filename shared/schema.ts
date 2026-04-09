@@ -32,7 +32,7 @@ export const loanEstimateRequestSchema = z.object({
   address: z.string().min(5),
   homePrice: z.number().positive(),
   downPaymentPercent: z.number().min(0).max(100),
-  loanType: z.enum(["conventional_30", "conventional_15", "fha_30", "va_30", "jumbo_30", "arm_7_1"]),
+  loanType: z.enum(["conventional_30", "conventional_15", "fha_30", "va_30", "jumbo_30", "arm_5_6", "arm_7_1", "arm_10_6"]),
   propertyTax: z.number().min(0),
   hoaFee: z.number().min(0),
   // Optional overrides

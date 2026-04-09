@@ -661,7 +661,7 @@ async function generatePDF(estimate: EstimateResult) {
     .replace("(FHA)", "FHA")
     .replace("(VA)", "VA")
     .replace("(Jumbo)", "Jumbo")
-    .replace("7/6 Adjustable Rate (ARM)", "ARM")
+    .replace(/\d+\/\d+ Adjustable Rate \(ARM\)/, "ARM")
     .replace(/[()]/g, "").trim();
   const filename = `${streetPart} - ${fmtCurrency(estimate.homePrice)} - ${estimate.downPaymentPercent}pct Down - ${loanShort}.pdf`
     .replace(/[/\\:*?"<>|]/g, "-"); // sanitize for file system
@@ -1430,7 +1430,7 @@ export default function HomePage() {
                     )} />
 
                     {/* PMI override — conventional + ARM loans, < 20% down */}
-                    {["conventional_30", "conventional_15", "arm_7_1"].includes(form.watch("loanType")) && Number(form.watch("downPaymentPercent")) < 20 && (
+                    {["conventional_30", "conventional_15", "arm_5_6", "arm_7_1", "arm_10_6"].includes(form.watch("loanType")) && Number(form.watch("downPaymentPercent")) < 20 && (
                       <FormField control={form.control} name="pmiOverride" render={({ field }) => (
                         <FormItem>
                           <FormLabel className="flex items-center gap-1.5">
@@ -1955,7 +1955,9 @@ export default function HomePage() {
                   { title: "FHA 30yr", body: "As low as 3.5% down. Good for first-time buyers." },
                   { title: "VA 30yr", body: "For eligible veterans. Often $0 down required." },
                   { title: "Jumbo 30yr", body: "For loans above $806,500 (2026 conforming limit)." },
-                  { title: "7/6 ARM", body: "Fixed 7 years, adjusts every 6 months after. Lower initial rate." },
+                  { title: "5/6 ARM", body: "Fixed 5 years, adjusts every 6 months. Lowest ARM initial rate." },
+                  { title: "7/6 ARM", body: "Fixed 7 years, adjusts every 6 months. Balanced rate and stability." },
+                  { title: "10/6 ARM", body: "Fixed 10 years, adjusts every 6 months. Most stability of ARMs." },
                 ].map(({ title, body }) => (
                   <div key={title}>
                     <p className="font-semibold text-foreground text-xs">{title}</p>

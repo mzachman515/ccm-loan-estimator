@@ -13,7 +13,9 @@ const MORTGAGE_RATES: Record<string, { rate: number; label: string; termYears: n
   fha_30:          { rate: 6.28, label: "30-Year Fixed (FHA)",          termYears: 30 },
   va_30:           { rate: 6.38, label: "30-Year Fixed (VA)",           termYears: 30 },
   jumbo_30:        { rate: 6.55, label: "30-Year Fixed (Jumbo)",        termYears: 30 },
+  arm_5_6:         { rate: 6.00, label: "5/6 Adjustable Rate (ARM)",   termYears: 30 },
   arm_7_1:         { rate: 6.11, label: "7/6 Adjustable Rate (ARM)",   termYears: 30 },
+  arm_10_6:        { rate: 6.20, label: "10/6 Adjustable Rate (ARM)",  termYears: 30 },
 };
 
 // ─── County-level effective property tax rates (%) ───────────────────────────
@@ -30,7 +32,7 @@ const COUNTY_TAX_RATES: Record<string, number> = {
   "Pasco County, FL": 0.95, "Marion County, FL": 0.88, "Lake County, FL": 0.90,
   "Osceola County, FL": 0.97, "St. Lucie County, FL": 1.04, "Escambia County, FL": 0.71,
   "Alachua County, FL": 1.05, "Leon County, FL": 0.85, "Okaloosa County, FL": 0.56,
-  "St. Johns County, FL": 0.84, "Charlotte County, FL": 1.005, "Hendry County, FL": 0.96,
+  "St. Johns County, FL": 0.84, "Charlotte County, FL": 1.50, // high-end estimate including non-ad-valorem; actual varies 1.0-2.0% by district "Hendry County, FL": 0.96,
   "Monroe County, FL": 0.68, "Indian River County, FL": 0.82, "Flagler County, FL": 0.97,
   // California
   "Los Angeles County, CA": 0.73, "San Diego County, CA": 0.73, "Orange County, CA": 0.60,
@@ -351,8 +353,9 @@ async function lookupProperty(address: string, magicKey?: string): Promise<Prope
     assessedValue: parcelResult?.assessedValue ?? null,
     annualTax: parcelResult?.annualTax ?? null,
     taxFromParcel,
-    // Use county appraiser flood zone if available, otherwise fall back to FEMA NFHL
-    floodZone: parcelResult?.floodZone ?? femaFloodZone ?? null,
+    // FEMA NFHL is the authoritative source for flood zones — use it as primary.
+    // Fall back to county appraiser data only if FEMA didn't return anything.
+    floodZone: femaFloodZone ?? parcelResult?.floodZone ?? null,
     zillowUrl,
     source: geo ? (parcelResult?.parcelId ? "county appraiser" : "address validated") : "manual",
   };
@@ -1221,7 +1224,7 @@ export async function registerRoutes(httpServer: Server, app: Express) {
       return 0.0020;
     }
     const ltv = loanAmount / homePrice;
-    const hasPMI = ["conventional_30", "conventional_15", "arm_7_1"].includes(loanType);
+    const hasPMI = ["conventional_30", "conventional_15", "arm_5_6", "arm_7_1", "arm_10_6"].includes(loanType);
     const effectivePmiRate = pmiOverrideRate ?? getPmiRate(ltv);
     const monthlyPMI = hasPMI && downPaymentPercent < 20
       ? Math.round((loanAmount * effectivePmiRate) / 12 * 100) / 100 : 0;

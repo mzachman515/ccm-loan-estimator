@@ -214,10 +214,44 @@ async function lookupCharlotte(address: string): Promise<ParcelResult> {
       }
     }
 
-    // Use non-homestead millage rate — new buyers have no homestead exemption in year of purchase
-    // Charlotte County 2025 published total millage ~10.05 mills = 1.005%
-    const CHARLOTTE_EFFECTIVE_RATE = 0.01005;
-    const annualTax = assessedValue ? Math.round(assessedValue * CHARLOTTE_EFFECTIVE_RATE) : null;
+    // Charlotte County effective millage rates by taxing district (2025 published)
+    // Includes ad valorem + non-ad valorem assessments (trash, fire, stormwater, etc.)
+    // Non-ad-valorem adds ~$500-$800/yr depending on district
+    // Source: Charlotte County Tax Collector 2025 bills
+    let taxingDistrict: string | null = null;
+    const distMatch = html.match(/Taxing\s+District[\s\S]{0,100}?(\d{3})/i);
+    if (distMatch) taxingDistrict = distMatch[1];
+
+    // Millage rates by district (ad valorem only) + estimated non-ad-valorem
+    // District 001: ~10.05 mills (unincorporated, basic services)
+    // District 104: ~15.09 mills (Port Charlotte area w/ lighting, fire, stormwater)
+    // District 100+: generally higher due to additional assessments
+    const CHARLOTTE_MILLAGE: Record<string, number> = {
+      "001": 0.01005,  // 10.05 mills - basic unincorporated
+      "002": 0.01100,
+      "003": 0.01050,
+      "100": 0.01400,
+      "101": 0.01450,
+      "102": 0.01400,
+      "103": 0.01480,
+      "104": 0.01509,  // 15.09 mills - Port Charlotte w/ fire, lighting, stormwater
+      "105": 0.01500,
+      "106": 0.01450,
+      "200": 0.01200,  // Punta Gorda city
+    };
+    const baseRate = taxingDistrict && CHARLOTTE_MILLAGE[taxingDistrict]
+      ? CHARLOTTE_MILLAGE[taxingDistrict]
+      : 0.01300; // conservative default if district unknown
+
+    // Non-ad-valorem assessments vary by district:
+    // District 100+: ~$770 (fire, trash, stormwater, lighting)
+    // District 001-003: ~$325 (basic trash only, no fire/stormwater)
+    // District 200: ~$400 (Punta Gorda city services)
+    const isHighDistrict = taxingDistrict && parseInt(taxingDistrict) >= 100 && parseInt(taxingDistrict) < 200;
+    const NON_AD_VALOREM_EST = isHighDistrict ? 770 : 325;
+    const annualTax = assessedValue
+      ? Math.round(assessedValue * baseRate) + NON_AD_VALOREM_EST
+      : null;
 
     return {
       parcelId: pid,
