@@ -32,7 +32,7 @@ const COUNTY_TAX_RATES: Record<string, number> = {
   "Pasco County, FL": 0.95, "Marion County, FL": 0.88, "Lake County, FL": 0.90,
   "Osceola County, FL": 0.97, "St. Lucie County, FL": 1.04, "Escambia County, FL": 0.71,
   "Alachua County, FL": 1.05, "Leon County, FL": 0.85, "Okaloosa County, FL": 0.56,
-  "St. Johns County, FL": 0.84, "Charlotte County, FL": 1.50, // high-end estimate including non-ad-valorem; actual varies 1.0-2.0% by district "Hendry County, FL": 0.96,
+  "St. Johns County, FL": 0.84, "Charlotte County, FL": 1.24, // median effective rate for Charlotte County (Ownwell/FL DOR 2025) "Hendry County, FL": 0.96,
   "Monroe County, FL": 0.68, "Indian River County, FL": 0.82, "Flagler County, FL": 0.97,
   // California
   "Los Angeles County, CA": 0.73, "San Diego County, CA": 0.73, "Orange County, CA": 0.60,
